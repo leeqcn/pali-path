@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlignLeft, BookOpen, CheckCircle2, Layers, Volume2 } from 'lucide-react';
+import {
+  AlignLeft,
+  BookOpen,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Layers,
+  Volume2,
+} from 'lucide-react';
 import { FlashcardsView } from './components/FlashcardsView';
 import { GrammarView } from './components/GrammarView';
 import { InflectionModal } from './components/InflectionModal';
@@ -26,6 +34,7 @@ export function App() {
   const [streakDays, setStreakDays] = useState<number>(12);
   const [baseMasteredOffset, setBaseMasteredOffset] = useState<number>(37);
   const [selectedLessonId, setSelectedLessonId] = useState<string>('dhp-1');
+  const [dailyCardLimit, setDailyCardLimit] = useState<number>(8);
   const [taskStatus, setTaskStatus] = useState({
     cardsDone: true,
     audioDone: false,
@@ -35,6 +44,7 @@ export function App() {
   const [selectedSuttaId, setSelectedSuttaId] = useState<string>('dhp-1');
   const [autoPlayAudioOnReader, setAutoPlayAudioOnReader] = useState<boolean>(false);
   const [activeAudioLabel, setActiveAudioLabel] = useState<string | null>(null);
+  const [bottomNavCollapsed, setBottomNavCollapsed] = useState<boolean>(false);
 
   // Modal state for DPD inflection tables
   const [inflectionModalEntry, setInflectionModalEntry] = useState<DpdWordEntry | null>(null);
@@ -44,7 +54,7 @@ export function App() {
 
   useEffect(() => {
     return subscribeAudioStatus((playing, label) => {
-      setActiveAudioLabel(playing ? (label ?? '巴利语吟诵中...') : null);
+      setActiveAudioLabel(playing ? (label ?? '巴利语朗读中...') : null);
     });
   }, []);
 
@@ -64,6 +74,9 @@ export function App() {
     }
     if (typeof metaMap.get('baseMasteredOffset') === 'number') {
       setBaseMasteredOffset(metaMap.get('baseMasteredOffset') as number);
+    }
+    if (typeof metaMap.get('dailyCardLimit') === 'number') {
+      setDailyCardLimit(metaMap.get('dailyCardLimit') as number);
     }
     if (typeof metaMap.get('selectedLessonId') === 'string') {
       const savedLesson = metaMap.get('selectedLessonId') as string;
@@ -97,6 +110,9 @@ export function App() {
       if (typeof metaMap.get('baseMasteredOffset') === 'number') {
         setBaseMasteredOffset(metaMap.get('baseMasteredOffset') as number);
       }
+      if (typeof metaMap.get('dailyCardLimit') === 'number') {
+        setDailyCardLimit(metaMap.get('dailyCardLimit') as number);
+      }
       if (typeof metaMap.get('selectedLessonId') === 'string') {
         const savedLesson = metaMap.get('selectedLessonId') as string;
         setSelectedLessonId(savedLesson);
@@ -120,9 +136,15 @@ export function App() {
     await loadAllFromIndexedDB();
   };
 
+  const handleChangeDailyCardLimit = async (limit: number) => {
+    await db.meta.put({ key: 'dailyCardLimit', value: limit });
+    setDailyCardLimit(limit);
+    await loadAllFromIndexedDB();
+  };
+
   const handleResetToZero = async () => {
     stopPaliAudio();
-    await resetToZeroProgress();
+    await resetToZeroProgress(dailyCardLimit);
     await loadAllFromIndexedDB();
   };
 
@@ -203,6 +225,8 @@ export function App() {
             masteredCount={masteredCount}
             suttaCoveragePct={suttaCoveragePct}
             selectedLessonId={selectedLessonId}
+            dailyCardLimit={dailyCardLimit}
+            onChangeDailyCardLimit={handleChangeDailyCardLimit}
             onSelectLesson={handleSelectLesson}
             onResetToZero={handleResetToZero}
             onRestoreSample={handleRestoreSample}
@@ -227,6 +251,8 @@ export function App() {
           <FlashcardsView
             cards={cards}
             selectedLessonId={selectedLessonId}
+            dailyCardLimit={dailyCardLimit}
+            onChangeDailyCardLimit={handleChangeDailyCardLimit}
             onCardsUpdated={loadAllFromIndexedDB}
             onCloseReviewToToday={() => handleSwitchTab('today')}
             onOpenInflection={handleOpenInflection}
@@ -254,89 +280,114 @@ export function App() {
         )}
       </main>
 
-      {/* Bottom Navigation Bar (Order: 今日 | 词卡 | 语法 | 阅读) */}
-      <nav
-        aria-label="主导航"
-        className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-[#E6EBE8]"
-      >
-        <div className="max-w-lg mx-auto grid grid-cols-4 items-center h-16 px-2">
+      {/* Collapsible Bottom Navigation Bar (Order: 今日 | 词卡 | 语法 | 阅读) */}
+      {bottomNavCollapsed ? (
+        <div className="fixed bottom-3 right-4 z-40">
           <button
             type="button"
-            onClick={() => handleSwitchTab('today')}
-            className={`flex flex-col items-center justify-center h-full transition-colors cursor-pointer ${
-              activeTab === 'today' ? 'text-[#1E625E]' : 'text-[#64706D] hover:text-[#141D1B]'
-            }`}
+            onClick={() => setBottomNavCollapsed(false)}
+            aria-label="展开底部导航菜单"
+            className="inline-flex items-center gap-1.5 rounded-full bg-[#16211F]/90 backdrop-blur-md text-white px-3.5 py-2 text-xs font-medium shadow-lg hover:bg-[#1E625E] transition-colors cursor-pointer"
           >
-            <CheckCircle2
-              className={`w-6 h-6 ${activeTab === 'today' ? 'stroke-[2.2]' : 'stroke-[1.75]'}`}
-            />
-            <span
-              className={`text-xs mt-1 ${
-                activeTab === 'today' ? 'font-bold' : 'font-medium'
-              }`}
-            >
-              今日
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleSwitchTab('cards')}
-            className={`flex flex-col items-center justify-center h-full transition-colors cursor-pointer ${
-              activeTab === 'cards' ? 'text-[#1E625E]' : 'text-[#64706D] hover:text-[#141D1B]'
-            }`}
-          >
-            <Layers
-              className={`w-6 h-6 ${activeTab === 'cards' ? 'stroke-[2.2]' : 'stroke-[1.75]'}`}
-            />
-            <span
-              className={`text-xs mt-1 ${
-                activeTab === 'cards' ? 'font-bold' : 'font-medium'
-              }`}
-            >
-              词卡
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleSwitchTab('grammar')}
-            className={`flex flex-col items-center justify-center h-full transition-colors cursor-pointer ${
-              activeTab === 'grammar' ? 'text-[#1E625E]' : 'text-[#64706D] hover:text-[#141D1B]'
-            }`}
-          >
-            <AlignLeft
-              className={`w-6 h-6 ${activeTab === 'grammar' ? 'stroke-[2.2]' : 'stroke-[1.75]'}`}
-            />
-            <span
-              className={`text-xs mt-1 ${
-                activeTab === 'grammar' ? 'font-bold' : 'font-medium'
-              }`}
-            >
-              语法
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleSwitchTab('reader')}
-            className={`flex flex-col items-center justify-center h-full transition-colors cursor-pointer ${
-              activeTab === 'reader' ? 'text-[#1E625E]' : 'text-[#64706D] hover:text-[#141D1B]'
-            }`}
-          >
-            <BookOpen
-              className={`w-6 h-6 ${activeTab === 'reader' ? 'stroke-[2.2]' : 'stroke-[1.75]'}`}
-            />
-            <span
-              className={`text-xs mt-1 ${
-                activeTab === 'reader' ? 'font-bold' : 'font-medium'
-              }`}
-            >
-              阅读
-            </span>
+            <ChevronUp className="w-3.5 h-3.5" />
+            <span>展开菜单</span>
           </button>
         </div>
-      </nav>
+      ) : (
+        <nav
+          aria-label="主导航"
+          className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-[#E6EBE8]"
+        >
+          <div className="max-w-lg mx-auto relative grid grid-cols-4 items-center h-16 px-2">
+            {/* Collapse Toggle Handle */}
+            <button
+              type="button"
+              onClick={() => setBottomNavCollapsed(true)}
+              title="收起底部菜单"
+              aria-label="收起底部菜单"
+              className="absolute -top-3.5 right-3 w-7 h-3.5 rounded-t-lg bg-white border border-b-0 border-[#E6EBE8] text-[#7A8783] hover:text-[#141D1B] flex items-center justify-center cursor-pointer"
+            >
+              <ChevronDown className="w-3.5 h-3.5" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSwitchTab('today')}
+              className={`flex flex-col items-center justify-center h-full transition-colors cursor-pointer ${
+                activeTab === 'today' ? 'text-[#1E625E]' : 'text-[#64706D] hover:text-[#141D1B]'
+              }`}
+            >
+              <CheckCircle2
+                className={`w-6 h-6 ${activeTab === 'today' ? 'stroke-[2.2]' : 'stroke-[1.75]'}`}
+              />
+              <span
+                className={`text-xs mt-1 ${
+                  activeTab === 'today' ? 'font-bold' : 'font-medium'
+                }`}
+              >
+                今日
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSwitchTab('cards')}
+              className={`flex flex-col items-center justify-center h-full transition-colors cursor-pointer ${
+                activeTab === 'cards' ? 'text-[#1E625E]' : 'text-[#64706D] hover:text-[#141D1B]'
+              }`}
+            >
+              <Layers
+                className={`w-6 h-6 ${activeTab === 'cards' ? 'stroke-[2.2]' : 'stroke-[1.75]'}`}
+              />
+              <span
+                className={`text-xs mt-1 ${
+                  activeTab === 'cards' ? 'font-bold' : 'font-medium'
+                }`}
+              >
+                词卡
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSwitchTab('grammar')}
+              className={`flex flex-col items-center justify-center h-full transition-colors cursor-pointer ${
+                activeTab === 'grammar' ? 'text-[#1E625E]' : 'text-[#64706D] hover:text-[#141D1B]'
+              }`}
+            >
+              <AlignLeft
+                className={`w-6 h-6 ${activeTab === 'grammar' ? 'stroke-[2.2]' : 'stroke-[1.75]'}`}
+              />
+              <span
+                className={`text-xs mt-1 ${
+                  activeTab === 'grammar' ? 'font-bold' : 'font-medium'
+                }`}
+              >
+                语法
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSwitchTab('reader')}
+              className={`flex flex-col items-center justify-center h-full transition-colors cursor-pointer ${
+                activeTab === 'reader' ? 'text-[#1E625E]' : 'text-[#64706D] hover:text-[#141D1B]'
+              }`}
+            >
+              <BookOpen
+                className={`w-6 h-6 ${activeTab === 'reader' ? 'stroke-[2.2]' : 'stroke-[1.75]'}`}
+              />
+              <span
+                className={`text-xs mt-1 ${
+                  activeTab === 'reader' ? 'font-bold' : 'font-medium'
+                }`}
+              >
+                阅读
+              </span>
+            </button>
+          </div>
+        </nav>
+      )}
 
       {/* DPD Inflection Table Modal */}
       <InflectionModal

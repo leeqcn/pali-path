@@ -1,5 +1,15 @@
 import React, { useMemo, useState } from 'react';
-import { Check, Layers, Plus, RotateCcw, Search, Sparkles, Table2, Volume2, X } from 'lucide-react';
+import {
+  Check,
+  Layers,
+  Plus,
+  RotateCcw,
+  Search,
+  Sparkles,
+  Table2,
+  Volume2,
+  X,
+} from 'lucide-react';
 import { DPD_DICTIONARY, SUTTAS, type DpdWordEntry } from '../data/paliData';
 import {
   getNextIntervalPreview,
@@ -12,6 +22,8 @@ import { speakPaliText } from '../utils/paliAudio';
 interface FlashcardsViewProps {
   cards: FlashcardRecord[];
   selectedLessonId?: string;
+  dailyCardLimit: number;
+  onChangeDailyCardLimit: (limit: number) => Promise<void>;
   onCardsUpdated: () => Promise<void>;
   onCloseReviewToToday?: () => void;
   onOpenInflection: (entry: DpdWordEntry, highlightForm?: string) => void;
@@ -21,6 +33,8 @@ interface FlashcardsViewProps {
 export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
   cards,
   selectedLessonId = 'dhp-1',
+  dailyCardLimit,
+  onChangeDailyCardLimit,
   onCardsUpdated,
   onCloseReviewToToday,
   onOpenInflection,
@@ -30,7 +44,10 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'due' | 'mastered' | 'highfreq'>('all');
 
-  // Build ordered review session queue prioritizing the currently selected lesson's words
+  // Front/Back flip state: false = Front (only Pāli word), true = Back (full details)
+  const [isFlipped, setIsFlipped] = useState<boolean>(false);
+
+  // Build ordered review session queue respecting dailyCardLimit (5, 8, 12, or 16)
   const reviewQueue = useMemo(() => {
     const lessonSutta = SUTTAS.find((s) => s.id === selectedLessonId) ?? SUTTAS[0];
     const lessonLemmas: string[] = [];
@@ -53,6 +70,14 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
             'paduṭṭha',
             'bhāsati',
             'karoti',
+            'vā',
+            'ce',
+            'dukkha',
+            'anveti',
+            'tato',
+            'naṃ',
+            'cakka',
+            'pada',
           ]
         : lessonLemmas;
 
@@ -60,20 +85,27 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
 
     preferredOrder.forEach((lemma) => {
       const found = cards.find((c) => c.lemma === lemma);
-      if (found) ordered.push(found);
+      if (found && ordered.length < dailyCardLimit) {
+        ordered.push(found);
+      }
     });
 
     const inDeckCards = cards.filter((c) => c.inDeck);
     inDeckCards.forEach((c) => {
-      if (!ordered.some((o) => o.lemma === c.lemma) && ordered.length < 10) {
+      if (!ordered.some((o) => o.lemma === c.lemma) && ordered.length < dailyCardLimit) {
         ordered.push(c);
       }
     });
 
-    return ordered.length > 0 ? ordered.slice(0, 8) : cards.slice(0, 8);
-  }, [cards, selectedLessonId]);
+    cards.forEach((c) => {
+      if (!ordered.some((o) => o.lemma === c.lemma) && ordered.length < dailyCardLimit) {
+        ordered.push(c);
+      }
+    });
 
-  // Default to index 2 (3 / 8 -> manopubbaṅgama) so it opens directly to the iconic card from Reference Image 1
+    return ordered.slice(0, dailyCardLimit);
+  }, [cards, selectedLessonId, dailyCardLimit]);
+
   const [currentIndex, setCurrentIndex] = useState<number>(() => {
     const manoIdx = reviewQueue.findIndex((c) => c.lemma === 'manopubbaṅgama');
     return manoIdx >= 0 ? manoIdx : 0;
@@ -81,8 +113,11 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
   const [sessionCompletedCount, setSessionCompletedCount] = useState(0);
   const [showSessionSummary, setShowSessionSummary] = useState(false);
 
-  const activeCard = reviewQueue[currentIndex] ?? reviewQueue[0];
-  const activeEntry = activeCard ? DPD_DICTIONARY[activeCard.lemma] : DPD_DICTIONARY.manopubbaṅgama;
+  const safeIndex = Math.min(currentIndex, Math.max(0, reviewQueue.length - 1));
+  const activeCard = reviewQueue[safeIndex] ?? reviewQueue[0];
+  const activeEntry = activeCard
+    ? DPD_DICTIONARY[activeCard.lemma]
+    : DPD_DICTIONARY.manopubbaṅgama;
   const intervalPreview = activeCard
     ? getNextIntervalPreview(activeCard)
     : { again: '10 分钟', hard: '1 天', good: '3 天', easy: '7 天' };
@@ -92,9 +127,10 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
     await rateFlashcard(activeCard.lemma, rating);
     await onCardsUpdated();
     setSessionCompletedCount((prev) => prev + 1);
+    setIsFlipped(false); // Reset to Front side for the next card
 
-    if (currentIndex + 1 < reviewQueue.length) {
-      setCurrentIndex(currentIndex + 1);
+    if (safeIndex + 1 < reviewQueue.length) {
+      setCurrentIndex(safeIndex + 1);
     } else {
       setShowSessionSummary(true);
     }
@@ -124,7 +160,6 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
     await onCardsUpdated();
   };
 
-  // Filtered vocabulary list sorted by Sutta frequency
   const browsableEntries = useMemo(() => {
     const all = Object.values(DPD_DICTIONARY).sort((a, b) => a.frequencyRank - b.frequencyRank);
     return all.filter((entry) => {
@@ -144,7 +179,6 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
     });
   }, [cards, searchQuery, statusFilter]);
 
-  // Render Example Sentence with highlighted headword
   const renderHighlightedExample = (pali: string, highlight: string) => {
     const idx = pali.toLowerCase().indexOf(highlight.toLowerCase());
     if (idx === -1) return <span>{pali}</span>;
@@ -176,17 +210,41 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
             type="button"
             onClick={() => {
               setShowSessionSummary(false);
+              setIsFlipped(false);
               setMode('review');
             }}
-            className="inline-flex items-center gap-2 rounded-2xl bg-[#1E625E] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#174E4A] transition-colors whitespace-nowrap shrink-0"
+            className="inline-flex items-center gap-2 rounded-2xl bg-[#1E625E] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#174E4A] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
           >
             <Layers className="w-4 h-4" />
-            <span>进入词卡复习 ({reviewQueue.length})</span>
+            <span>进入词卡复习 ({reviewQueue.length} 词)</span>
           </button>
         </div>
 
+        {/* Daily Limit Quick Selector */}
+        <div className="mt-4 rounded-2xl bg-white p-3.5 border border-[#E6EBE8] flex flex-wrap items-center justify-between gap-2">
+          <span className="text-xs font-medium text-[#52605C]">
+            每日词卡复习数量（建议新手 5–8 词/天）：
+          </span>
+          <div className="flex items-center gap-1.5">
+            {[5, 8, 12, 16].map((limit) => (
+              <button
+                key={limit}
+                type="button"
+                onClick={() => onChangeDailyCardLimit(limit)}
+                className={`px-3 py-1 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
+                  dailyCardLimit === limit
+                    ? 'bg-[#1E625E] text-white'
+                    : 'bg-[#F5F6F4] text-[#52605C] hover:text-[#141D1B]'
+                }`}
+              >
+                {limit} 词/天
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Search & Filter Controls */}
-        <div className="mt-4 flex flex-col sm:flex-row gap-2.5">
+        <div className="mt-3 flex flex-col sm:flex-row gap-2.5">
           <div className="relative flex-1">
             <Search className="w-4 h-4 text-[#7A8783] absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
@@ -210,7 +268,7 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
                 key={tab.id}
                 type="button"
                 onClick={() => setStatusFilter(tab.id)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                   statusFilter === tab.id
                     ? 'bg-white text-[#141D1B] shadow-2xs'
                     : 'text-[#52605C] hover:text-[#141D1B]'
@@ -242,16 +300,17 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
                       onClick={() => {
                         const qIdx = reviewQueue.findIndex((c) => c.lemma === entry.lemma);
                         if (qIdx >= 0) setCurrentIndex(qIdx);
+                        setIsFlipped(false);
                         setMode('review');
                       }}
-                      className="font-pali text-xl font-semibold text-[#141D1B] hover:text-[#1E625E] text-left"
+                      className="font-pali text-xl font-semibold text-[#141D1B] hover:text-[#1E625E] text-left cursor-pointer"
                     >
                       {entry.lemma}
                     </button>
                     <button
                       type="button"
                       onClick={() => speakPaliText(entry.lemma)}
-                      className="w-7 h-7 rounded-full bg-[#EBF3F1] text-[#1E625E] flex items-center justify-center hover:bg-[#DDF0ED]"
+                      className="w-7 h-7 rounded-full bg-[#EBF3F1] text-[#1E625E] flex items-center justify-center hover:bg-[#DDF0ED] cursor-pointer"
                       aria-label={`朗读 ${entry.lemma}`}
                     >
                       <Volume2 className="w-3.5 h-3.5" />
@@ -270,14 +329,14 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
                   <button
                     type="button"
                     onClick={() => onOpenInflection(entry)}
-                    className="px-3 py-2 rounded-xl border border-[#CEDAD7] text-xs font-medium text-[#1E625E] hover:bg-[#EBF3F1] transition-colors whitespace-nowrap"
+                    className="px-3 py-2 rounded-xl border border-[#CEDAD7] text-xs font-medium text-[#1E625E] hover:bg-[#EBF3F1] transition-colors whitespace-nowrap cursor-pointer"
                   >
                     词形表
                   </button>
                   <button
                     type="button"
                     onClick={() => handleToggleDeck(entry.lemma, inDeck)}
-                    className={`inline-flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-medium transition-colors whitespace-nowrap ${
+                    className={`inline-flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-medium transition-colors whitespace-nowrap cursor-pointer ${
                       inDeck
                         ? 'bg-[#EBF3F1] text-[#1E625E]'
                         : 'bg-[#1E625E] text-white hover:bg-[#174E4A]'
@@ -319,7 +378,7 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
               }
             }}
             aria-label="退出词卡复习"
-            className="min-w-[40px] min-h-[40px] -ml-2 rounded-full flex items-center justify-center text-[#141D1B] hover:bg-black/5 transition-colors"
+            className="min-w-[40px] min-h-[40px] -ml-2 rounded-full flex items-center justify-center text-[#141D1B] hover:bg-black/5 transition-colors cursor-pointer"
           >
             <X className="w-6 h-6 stroke-[2]" />
           </button>
@@ -330,12 +389,12 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
           <button
             type="button"
             onClick={() => setMode('browse')}
-            className="text-xs font-medium text-[#1E625E] hover:underline whitespace-nowrap"
+            className="text-xs font-medium text-[#1E625E] hover:underline whitespace-nowrap cursor-pointer"
           >
-            高频词表 ({Object.keys(DPD_DICTIONARY).length})
+            词表与词量 ({dailyCardLimit}词/天)
           </button>
           <span className="font-mono-num text-base font-semibold text-[#52605C]">
-            {currentIndex + 1} / {reviewQueue.length}
+            {safeIndex + 1} / {reviewQueue.length}
           </span>
         </div>
       </div>
@@ -344,7 +403,7 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
       <div className="mt-1.5 h-1 w-full rounded-full bg-[#DCE4E1] overflow-hidden">
         <div
           className="h-full bg-[#1E625E] transition-all duration-300 rounded-full"
-          style={{ width: `${((currentIndex + 1) / Math.max(1, reviewQueue.length)) * 100}%` }}
+          style={{ width: `${((safeIndex + 1) / Math.max(1, reviewQueue.length)) * 100}%` }}
         />
       </div>
 
@@ -355,16 +414,17 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
           </div>
           <h2 className="text-2xl font-bold text-[#141D1B]">今日词卡复习已完成</h2>
           <p className="text-sm text-[#52605C]">
-            本次共复习 <span className="font-semibold text-[#1E625E]">{sessionCompletedCount}</span> 个巴利语词汇，间隔重复进度已保存至浏览器 IndexedDB。
+            本次共完成 <span className="font-semibold text-[#1E625E]">{sessionCompletedCount}</span> 个巴利语词汇，间隔重复进度已保存至浏览器 IndexedDB。
           </p>
           <div className="pt-2 flex flex-col sm:flex-row gap-3 justify-center">
             <button
               type="button"
               onClick={() => {
                 setShowSessionSummary(false);
+                setIsFlipped(false);
                 setCurrentIndex(0);
               }}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-[#CEDAD7] px-5 py-3 text-sm font-semibold text-[#1E625E] hover:bg-[#EBF3F1] transition-colors"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-[#CEDAD7] px-5 py-3 text-sm font-semibold text-[#1E625E] hover:bg-[#EBF3F1] transition-colors cursor-pointer"
             >
               <RotateCcw className="w-4 h-4" />
               <span>再复习一轮</span>
@@ -372,137 +432,206 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
             <button
               type="button"
               onClick={() => setMode('browse')}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#1E625E] px-5 py-3 text-sm font-semibold text-white hover:bg-[#174E4A] transition-colors"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#1E625E] px-5 py-3 text-sm font-semibold text-white hover:bg-[#174E4A] transition-colors cursor-pointer"
             >
-              <span>浏览高频词库</span>
+              <span>管理词库与每日词量</span>
             </button>
           </div>
         </div>
       ) : (
         <>
-          {/* Main Flashcard Container matching Reference Image 1 */}
-          <div className="mt-4 rounded-3xl bg-white px-6 py-8 sm:px-8 sm:py-9 shadow-2xs border border-[#E8ECEA]">
-            {/* Word & POS */}
-            <div className="text-center">
-              <h2 className="font-pali text-[36px] sm:text-[42px] leading-tight font-semibold text-[#141D1B] tracking-tight break-words">
-                {activeEntry.lemma}
-              </h2>
-              <p className="mt-2 text-base text-[#64706D]">{activeEntry.pos}</p>
-            </div>
-
-            {/* Circular Speaker Button */}
-            <div className="my-6 flex justify-center">
-              <button
-                type="button"
-                onClick={() => speakPaliText(activeEntry.lemma)}
-                aria-label="播放单词发音"
-                className="w-16 h-16 rounded-full bg-[#EBF3F1] text-[#1E625E] flex items-center justify-center hover:bg-[#DDF0ED] active:scale-95 transition-all cursor-pointer"
-              >
-                <Volume2 className="w-7 h-7 stroke-[2]" />
-              </button>
-            </div>
-
-            <div className="border-t border-[#EEF2F0] my-6" />
-
-            {/* Meanings: 中 & EN */}
-            <div className="space-y-3.5">
-              <div className="flex items-center gap-3">
-                <span className="inline-flex items-center justify-center rounded-md bg-[#E0EFEA] px-2 py-0.5 text-xs font-bold text-[#1E625E] shrink-0">
-                  中
-                </span>
-                <span className="text-2xl font-bold text-[#141D1B] tracking-tight">
-                  {activeEntry.meaningZh}
-                </span>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <span className="inline-flex items-center justify-center rounded-md bg-[#E0EFEA] px-1.5 py-0.5 text-xs font-bold text-[#1E625E] shrink-0 mt-1">
-                  EN
-                </span>
-                <span className="text-lg text-[#2C3735] leading-snug">
-                  {activeEntry.meaningEn}
-                </span>
-              </div>
-            </div>
-
-            {/* Compound / Root Breakdown Chips */}
-            <div className="mt-6 flex flex-wrap items-center justify-between gap-2">
-              <div className="flex flex-wrap items-center gap-2">
-                {activeEntry.components.map((comp, idx) => (
-                  <React.Fragment key={comp.form}>
-                    {idx > 0 && <span className="text-[#7A8783] text-sm font-medium">+</span>}
-                    <span className="inline-flex items-center gap-1.5 rounded-xl bg-[#EFF2F0] px-3.5 py-1.5 text-sm text-[#2C3735]">
-                      <span className="font-pali font-medium">{comp.form}</span>
-                      <span>{comp.gloss}</span>
-                    </span>
-                  </React.Fragment>
-                ))}
-              </div>
-
-              <button
-                type="button"
-                onClick={() => onOpenInflection(activeEntry)}
-                className="inline-flex items-center gap-1 text-xs font-medium text-[#1E625E] hover:underline py-1"
-              >
-                <Table2 className="w-3.5 h-3.5" />
-                <span>词形表</span>
-              </button>
-            </div>
-
-            {/* Sutta Example Box */}
+          {/* Interactive Front / Back Flashcard */}
+          {!isFlipped ? (
+            /* FRONT SIDE (正面：只有巴利单词与发音喇叭，点击卡片翻转) */
             <div
-              onClick={() => speakPaliText(activeEntry.example.pali)}
-              className="mt-6 rounded-2xl bg-[#EEF3F1] p-4 sm:p-5 cursor-pointer hover:bg-[#E5EEEB] transition-colors"
+              onClick={() => setIsFlipped(true)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setIsFlipped(true);
+                }
+              }}
+              className="mt-4 rounded-3xl bg-white px-6 py-16 sm:px-8 sm:py-20 shadow-2xs border border-[#E8ECEA] min-h-[420px] flex flex-col items-center justify-between cursor-pointer hover:border-[#C2D6D2] transition-all select-none"
             >
-              <div className="flex items-center justify-between text-xs text-[#64706D]">
-                <span>例句 · {activeEntry.example.ref}</span>
-                <span className="text-[11px] text-[#1E625E]">点击朗读例句</span>
+              <span className="text-xs font-medium text-[#8C9894] tracking-wide">
+                词卡正面 · 回忆词义与词根
+              </span>
+
+              <div className="my-auto text-center space-y-8">
+                <h2 className="font-pali text-[38px] sm:text-[44px] leading-tight font-semibold text-[#141D1B] tracking-tight break-words">
+                  {activeEntry.lemma}
+                </h2>
+
+                <div className="flex justify-center">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      speakPaliText(activeEntry.lemma);
+                    }}
+                    aria-label="播放单词发音"
+                    className="w-16 h-16 rounded-full bg-[#EBF3F1] text-[#1E625E] flex items-center justify-center hover:bg-[#DDF0ED] active:scale-95 transition-all cursor-pointer"
+                  >
+                    <Volume2 className="w-7 h-7 stroke-[2]" />
+                  </button>
+                </div>
               </div>
-              <p className="mt-2 font-pali text-xl sm:text-[22px] text-[#141D1B] leading-relaxed">
-                {renderHighlightedExample(activeEntry.example.pali, activeEntry.example.highlight)}
-              </p>
-              <p className="mt-1.5 text-sm text-[#52605C]">{activeEntry.example.zh}</p>
+
+              <div className="inline-flex items-center gap-1.5 rounded-full bg-[#F5F6F4] px-4 py-2 text-xs font-medium text-[#52605C]">
+                <span>点击卡片任意位置翻转查看背面释义</span>
+              </div>
             </div>
-          </div>
-
-          {/* 4 Spaced Repetition Buttons matching Reference Image 1 */}
-          <div className="mt-5 grid grid-cols-4 gap-2.5">
-            <button
-              type="button"
-              onClick={() => handleRate('again')}
-              className="rounded-2xl bg-white border border-[#DCE4E1] py-3.5 px-2 flex flex-col items-center justify-center hover:bg-[#FAFBF9] active:scale-[0.98] transition-all cursor-pointer"
+          ) : (
+            /* BACK SIDE (反面：完整释义、词根拆解、例句，点击空白处可翻回正面) */
+            <div
+              onClick={() => setIsFlipped(false)}
+              className="mt-4 rounded-3xl bg-white px-6 py-8 sm:px-8 sm:py-9 shadow-2xs border border-[#E8ECEA] min-h-[420px] cursor-pointer transition-all"
             >
-              <span className="text-base font-bold text-[#141D1B]">重来</span>
-              <span className="mt-0.5 text-xs text-[#64706D]">{intervalPreview.again}</span>
-            </button>
+              {/* Word & POS */}
+              <div className="text-center">
+                <h2 className="font-pali text-[36px] sm:text-[42px] leading-tight font-semibold text-[#141D1B] tracking-tight break-words">
+                  {activeEntry.lemma}
+                </h2>
+                <p className="mt-2 text-base text-[#64706D]">{activeEntry.pos}</p>
+              </div>
 
-            <button
-              type="button"
-              onClick={() => handleRate('hard')}
-              className="rounded-2xl bg-white border border-[#DCE4E1] py-3.5 px-2 flex flex-col items-center justify-center hover:bg-[#FAFBF9] active:scale-[0.98] transition-all cursor-pointer"
-            >
-              <span className="text-base font-bold text-[#141D1B]">困难</span>
-              <span className="mt-0.5 text-xs text-[#64706D]">{intervalPreview.hard}</span>
-            </button>
+              {/* Circular Speaker Button */}
+              <div className="my-6 flex justify-center">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    speakPaliText(activeEntry.lemma);
+                  }}
+                  aria-label="播放单词发音"
+                  className="w-16 h-16 rounded-full bg-[#EBF3F1] text-[#1E625E] flex items-center justify-center hover:bg-[#DDF0ED] active:scale-95 transition-all cursor-pointer"
+                >
+                  <Volume2 className="w-7 h-7 stroke-[2]" />
+                </button>
+              </div>
 
-            <button
-              type="button"
-              onClick={() => handleRate('good')}
-              className="rounded-2xl bg-[#1E625E] border border-[#1E625E] py-3.5 px-2 flex flex-col items-center justify-center text-white shadow-xs hover:bg-[#174E4A] active:scale-[0.98] transition-all cursor-pointer"
-            >
-              <span className="text-base font-bold">记得</span>
-              <span className="mt-0.5 text-xs text-[#D5EAE6]">{intervalPreview.good}</span>
-            </button>
+              <div className="border-t border-[#EEF2F0] my-6" />
 
-            <button
-              type="button"
-              onClick={() => handleRate('easy')}
-              className="rounded-2xl bg-white border border-[#DCE4E1] py-3.5 px-2 flex flex-col items-center justify-center hover:bg-[#FAFBF9] active:scale-[0.98] transition-all cursor-pointer"
-            >
-              <span className="text-base font-bold text-[#141D1B]">轻松</span>
-              <span className="mt-0.5 text-xs text-[#64706D]">{intervalPreview.easy}</span>
-            </button>
-          </div>
+              {/* Meanings: 中 & EN */}
+              <div className="space-y-3.5">
+                <div className="flex items-center gap-3">
+                  <span className="inline-flex items-center justify-center rounded-md bg-[#E0EFEA] px-2 py-0.5 text-xs font-bold text-[#1E625E] shrink-0">
+                    中
+                  </span>
+                  <span className="text-2xl font-bold text-[#141D1B] tracking-tight">
+                    {activeEntry.meaningZh}
+                  </span>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <span className="inline-flex items-center justify-center rounded-md bg-[#E0EFEA] px-1.5 py-0.5 text-xs font-bold text-[#1E625E] shrink-0 mt-1">
+                    EN
+                  </span>
+                  <span className="text-lg text-[#2C3735] leading-snug">
+                    {activeEntry.meaningEn}
+                  </span>
+                </div>
+              </div>
+
+              {/* Compound / Root Breakdown Chips */}
+              <div className="mt-6 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  {activeEntry.components.map((comp, idx) => (
+                    <React.Fragment key={comp.form}>
+                      {idx > 0 && <span className="text-[#7A8783] text-sm font-medium">+</span>}
+                      <span className="inline-flex items-center gap-1.5 rounded-xl bg-[#EFF2F0] px-3.5 py-1.5 text-sm text-[#2C3735]">
+                        <span className="font-pali font-medium">{comp.form}</span>
+                        <span>{comp.gloss}</span>
+                      </span>
+                    </React.Fragment>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenInflection(activeEntry);
+                  }}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-[#1E625E] hover:underline py-1 cursor-pointer"
+                >
+                  <Table2 className="w-3.5 h-3.5" />
+                  <span>词形表</span>
+                </button>
+              </div>
+
+              {/* Sutta Example Box */}
+              <div
+                onClick={(e) => {
+                  e.stopPropagation();
+                  speakPaliText(activeEntry.example.pali);
+                }}
+                className="mt-6 rounded-2xl bg-[#EEF3F1] p-4 sm:p-5 cursor-pointer hover:bg-[#E5EEEB] transition-colors"
+              >
+                <div className="flex items-center justify-between text-xs text-[#64706D]">
+                  <span>例句 · {activeEntry.example.ref}</span>
+                  <span className="text-[11px] text-[#1E625E]">点击朗读例句</span>
+                </div>
+                <p className="mt-2 font-pali text-xl sm:text-[22px] text-[#141D1B] leading-relaxed">
+                  {renderHighlightedExample(activeEntry.example.pali, activeEntry.example.highlight)}
+                </p>
+                <p className="mt-1.5 text-sm text-[#52605C]">{activeEntry.example.zh}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Bottom Area: Flip Button when on Front, or 4 SRS Rating Buttons when on Back */}
+          {!isFlipped ? (
+            <div className="mt-5">
+              <button
+                type="button"
+                onClick={() => setIsFlipped(true)}
+                className="w-full rounded-2xl bg-[#1E625E] py-4 px-6 text-base font-bold text-white shadow-xs hover:bg-[#174E4A] active:scale-[0.99] transition-all cursor-pointer"
+              >
+                显示答案（翻转词卡）
+              </button>
+            </div>
+          ) : (
+            <div className="mt-5 grid grid-cols-4 gap-2.5">
+              <button
+                type="button"
+                onClick={() => handleRate('again')}
+                className="rounded-2xl bg-white border border-[#DCE4E1] py-3.5 px-2 flex flex-col items-center justify-center hover:bg-[#FAFBF9] active:scale-[0.98] transition-all cursor-pointer"
+              >
+                <span className="text-base font-bold text-[#141D1B]">重来</span>
+                <span className="mt-0.5 text-xs text-[#64706D]">{intervalPreview.again}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleRate('hard')}
+                className="rounded-2xl bg-white border border-[#DCE4E1] py-3.5 px-2 flex flex-col items-center justify-center hover:bg-[#FAFBF9] active:scale-[0.98] transition-all cursor-pointer"
+              >
+                <span className="text-base font-bold text-[#141D1B]">困难</span>
+                <span className="mt-0.5 text-xs text-[#64706D]">{intervalPreview.hard}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleRate('good')}
+                className="rounded-2xl bg-[#1E625E] border border-[#1E625E] py-3.5 px-2 flex flex-col items-center justify-center text-white shadow-xs hover:bg-[#174E4A] active:scale-[0.98] transition-all cursor-pointer"
+              >
+                <span className="text-base font-bold">记得</span>
+                <span className="mt-0.5 text-xs text-[#D5EAE6]">{intervalPreview.good}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleRate('easy')}
+                className="rounded-2xl bg-white border border-[#DCE4E1] py-3.5 px-2 flex flex-col items-center justify-center hover:bg-[#FAFBF9] active:scale-[0.98] transition-all cursor-pointer"
+              >
+                <span className="text-base font-bold text-[#141D1B]">轻松</span>
+                <span className="mt-0.5 text-xs text-[#64706D]">{intervalPreview.easy}</span>
+              </button>
+            </div>
+          )}
 
           {/* Quick Card Selector Dots */}
           <div className="mt-4 flex items-center justify-center gap-1.5">
@@ -510,10 +639,13 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
               <button
                 key={c.lemma}
                 type="button"
-                onClick={() => setCurrentIndex(idx)}
+                onClick={() => {
+                  setCurrentIndex(idx);
+                  setIsFlipped(false);
+                }}
                 aria-label={`切换到第 ${idx + 1} 张词卡`}
-                className={`h-2 rounded-full transition-all ${
-                  idx === currentIndex ? 'w-6 bg-[#1E625E]' : 'w-2 bg-[#CBD6D2] hover:bg-[#9EB0AA]'
+                className={`h-2 rounded-full transition-all cursor-pointer ${
+                  idx === safeIndex ? 'w-6 bg-[#1E625E]' : 'w-2 bg-[#CBD6D2] hover:bg-[#9EB0AA]'
                 }`}
               />
             ))}

@@ -201,6 +201,7 @@ export async function restoreSampleProgress(): Promise<void> {
     { key: 'streakDays', value: 12 },
     { key: 'baseMasteredOffset', value: 37 },
     { key: 'selectedLessonId', value: 'dhp-1' },
+    { key: 'dailyCardLimit', value: 8 },
     { key: 'task_cards_done', value: true },
     { key: 'task_audio_done', value: false },
     { key: 'task_reading_done', value: false },
@@ -208,7 +209,7 @@ export async function restoreSampleProgress(): Promise<void> {
 }
 
 // Reset all progress to 0 so the user can study from scratch (从 0 开始学)
-export async function resetToZeroProgress(): Promise<void> {
+export async function resetToZeroProgress(dailyLimit = 5): Promise<void> {
   const now = Date.now();
   const allLemmas = Object.keys(DPD_DICTIONARY);
 
@@ -216,7 +217,7 @@ export async function resetToZeroProgress(): Promise<void> {
     (a, b) => DPD_DICTIONARY[a].frequencyRank - DPD_DICTIONARY[b].frequencyRank
   );
 
-  // Put the first 8 Lesson 1 words into today's new learning queue, everything else 'new' and not yet mastered
+  // Put only the first `dailyLimit` Lesson 1 words into today's initial learning queue
   const lesson1Lemmas = [
     'manopubbaṅgama',
     'dhamma',
@@ -226,7 +227,7 @@ export async function resetToZeroProgress(): Promise<void> {
     'ce',
     'paduṭṭha',
     'bhāsati',
-  ];
+  ].slice(0, dailyLimit);
 
   const freshCards: FlashcardRecord[] = sortedLemmas.map((lemma, idx) => {
     const isFirstBatch = lesson1Lemmas.includes(lemma);
@@ -253,6 +254,7 @@ export async function resetToZeroProgress(): Promise<void> {
     { key: 'streakDays', value: 0 },
     { key: 'baseMasteredOffset', value: 0 },
     { key: 'selectedLessonId', value: 'dhp-1' },
+    { key: 'dailyCardLimit', value: dailyLimit },
     { key: 'task_cards_done', value: false },
     { key: 'task_audio_done', value: false },
     { key: 'task_reading_done', value: false },
