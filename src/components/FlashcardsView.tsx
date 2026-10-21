@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Check, Layers, Plus, RotateCcw, Search, Sparkles, Table2, Volume2, X } from 'lucide-react';
-import { DPD_DICTIONARY, type DpdWordEntry } from '../data/paliData';
+import { DPD_DICTIONARY, SUTTAS, type DpdWordEntry } from '../data/paliData';
 import {
   getNextIntervalPreview,
   rateFlashcard,
@@ -11,6 +11,7 @@ import { speakPaliText } from '../utils/paliAudio';
 
 interface FlashcardsViewProps {
   cards: FlashcardRecord[];
+  selectedLessonId?: string;
   onCardsUpdated: () => Promise<void>;
   onCloseReviewToToday?: () => void;
   onOpenInflection: (entry: DpdWordEntry, highlightForm?: string) => void;
@@ -19,6 +20,7 @@ interface FlashcardsViewProps {
 
 export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
   cards,
+  selectedLessonId = 'dhp-1',
   onCardsUpdated,
   onCloseReviewToToday,
   onOpenInflection,
@@ -28,34 +30,48 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'due' | 'mastered' | 'highfreq'>('all');
 
-  // Build ordered review session queue (8 cards matching Reference Image 1, with manopubbaṅgama at #3)
+  // Build ordered review session queue prioritizing the currently selected lesson's words
   const reviewQueue = useMemo(() => {
-    const preferredOrder = [
-      'dhamma',
-      'manas',
-      'manopubbaṅgama',
-      'manoseṭṭha',
-      'manomaya',
-      'paduṭṭha',
-      'bhāsati',
-      'karoti',
-    ];
-    const inDeckCards = cards.filter((c) => c.inDeck);
+    const lessonSutta = SUTTAS.find((s) => s.id === selectedLessonId) ?? SUTTAS[0];
+    const lessonLemmas: string[] = [];
+    lessonSutta.sentences.forEach((s) =>
+      s.tokens.forEach((t) => {
+        if (!lessonLemmas.includes(t.lemma) && DPD_DICTIONARY[t.lemma]) {
+          lessonLemmas.push(t.lemma);
+        }
+      })
+    );
+
+    const preferredOrder =
+      selectedLessonId === 'dhp-1'
+        ? [
+            'dhamma',
+            'manas',
+            'manopubbaṅgama',
+            'manoseṭṭha',
+            'manomaya',
+            'paduṭṭha',
+            'bhāsati',
+            'karoti',
+          ]
+        : lessonLemmas;
+
     const ordered: FlashcardRecord[] = [];
 
     preferredOrder.forEach((lemma) => {
-      const found = inDeckCards.find((c) => c.lemma === lemma);
+      const found = cards.find((c) => c.lemma === lemma);
       if (found) ordered.push(found);
     });
 
+    const inDeckCards = cards.filter((c) => c.inDeck);
     inDeckCards.forEach((c) => {
-      if (!ordered.some((o) => o.lemma === c.lemma) && ordered.length < 12) {
+      if (!ordered.some((o) => o.lemma === c.lemma) && ordered.length < 10) {
         ordered.push(c);
       }
     });
 
     return ordered.length > 0 ? ordered.slice(0, 8) : cards.slice(0, 8);
-  }, [cards]);
+  }, [cards, selectedLessonId]);
 
   // Default to index 2 (3 / 8 -> manopubbaṅgama) so it opens directly to the iconic card from Reference Image 1
   const [currentIndex, setCurrentIndex] = useState<number>(() => {

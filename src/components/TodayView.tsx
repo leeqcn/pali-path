@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   AlertTriangle,
+  BookMarked,
   BookOpen,
   Check,
   ChevronDown,
@@ -8,12 +9,16 @@ import {
   ChevronUp,
   Database,
   ExternalLink,
+  RotateCcw,
   Volume2,
+  X,
 } from 'lucide-react';
 import {
   DATA_SOURCES_AND_LICENSES,
   DPD_DICTIONARY,
   GRAMMAR_TOPICS,
+  SUTTAS,
+  type SuttaItem,
 } from '../data/paliData';
 import type { FlashcardRecord, GrammarAttemptRecord } from '../db/database';
 import { speakPaliText } from '../utils/paliAudio';
@@ -25,15 +30,21 @@ interface TodayViewProps {
   streakDays: number;
   masteredCount: number;
   suttaCoveragePct: number;
+  selectedLessonId: string;
+  onSelectLesson: (suttaId: string) => Promise<void>;
+  onResetToZero: () => Promise<void>;
+  onRestoreSample: () => Promise<void>;
   taskStatus: {
     cardsDone: boolean;
     audioDone: boolean;
     readingDone: boolean;
   };
-  onToggleTaskDone: (key: 'task_cards_done' | 'task_audio_done' | 'task_reading_done') => Promise<void>;
+  onToggleTaskDone: (
+    key: 'task_cards_done' | 'task_audio_done' | 'task_reading_done'
+  ) => Promise<void>;
   onStartFlashcardReview: () => void;
-  onStartAudioTask: () => void;
-  onStartReadingTask: () => void;
+  onStartAudioTask: (suttaId: string) => void;
+  onStartReadingTask: (suttaId: string) => void;
   onStartGrammarTask: () => void;
 }
 
@@ -43,6 +54,10 @@ export const TodayView: React.FC<TodayViewProps> = ({
   streakDays,
   masteredCount,
   suttaCoveragePct,
+  selectedLessonId,
+  onSelectLesson,
+  onResetToZero,
+  onRestoreSample,
   taskStatus,
   onToggleTaskDone,
   onStartFlashcardReview,
@@ -51,6 +66,26 @@ export const TodayView: React.FC<TodayViewProps> = ({
   onStartGrammarTask,
 }) => {
   const [showDataAndStats, setShowDataAndStats] = useState(false);
+  const [showCourseModal, setShowCourseModal] = useState(false);
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [resetBannerMsg, setResetBannerMsg] = useState<string | null>(null);
+
+  const currentLesson: SuttaItem = useMemo(
+    () => SUTTAS.find((s) => s.id === selectedLessonId) ?? SUTTAS[0],
+    [selectedLessonId]
+  );
+
+  const currentLessonIndex = useMemo(
+    () => Math.max(0, SUTTAS.findIndex((s) => s.id === currentLesson.id)),
+    [currentLesson.id]
+  );
+
+  // Count how many unique words in the current lesson are in the deck
+  const lessonWordCount = useMemo(() => {
+    const set = new Set<string>();
+    currentLesson.sentences.forEach((s) => s.tokens.forEach((t) => set.add(t.lemma)));
+    return Math.max(6, set.size);
+  }, [currentLesson]);
 
   const completedTasksCount =
     (taskStatus.cardsDone ? 1 : 0) +
@@ -62,7 +97,6 @@ export const TodayView: React.FC<TodayViewProps> = ({
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (completedTasksCount / 3) * circumference;
 
-  // Identify difficult words & grammar mistakes for adaptive review
   const difficultCards = cards.filter((c) => c.lapses > 0 || (c.inDeck && c.easeFactor < 2.3));
   const wrongAttempts = grammarAttempts.filter((a) => !a.isCorrect);
 
@@ -70,9 +104,9 @@ export const TodayView: React.FC<TodayViewProps> = ({
     if (!taskStatus.cardsDone) {
       onStartFlashcardReview();
     } else if (!taskStatus.audioDone) {
-      onStartAudioTask();
+      onStartAudioTask(currentLesson.id);
     } else if (!taskStatus.readingDone) {
-      onStartReadingTask();
+      onStartReadingTask(currentLesson.id);
     } else {
       onStartFlashcardReview();
     }
@@ -80,22 +114,57 @@ export const TodayView: React.FC<TodayViewProps> = ({
 
   return (
     <div className="max-w-lg mx-auto px-5 pt-6 pb-28 flex flex-col min-h-[calc(100svh-4rem)]">
-      {/* Header matching Reference Image 2 */}
+      {/* Header matching Reference Image 2 + Course Switcher & Reset Controls */}
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-[36px] leading-tight font-bold text-[#141D1B] tracking-tight">
             今日
           </h1>
-          <p className="mt-1 text-base text-[#64706D]">10 月 19 日 · 周一</p>
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-[#64706D]">
+            <span>第 {currentLessonIndex + 1} 课 · {currentLesson.titleZh}</span>
+          </div>
         </div>
-        <div className="pt-1">
+
+        <div className="flex items-center gap-2 pt-1 flex-wrap justify-end">
+          <button
+            type="button"
+            onClick={() => setShowCourseModal(true)}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-[#CEDAD7] bg-white px-3 py-2 text-xs font-semibold text-[#1E625E] hover:bg-[#EBF3F1] transition-colors whitespace-nowrap shrink-0 min-h-[38px] cursor-pointer"
+          >
+            <BookMarked className="w-3.5 h-3.5" />
+            <span>选课 / 复习前面</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowResetModal(true)}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-[#DCE4E1] bg-white px-3 py-2 text-xs font-medium text-[#52605C] hover:text-[#141D1B] hover:bg-[#F5F6F4] transition-colors whitespace-nowrap shrink-0 min-h-[38px] cursor-pointer"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>从 0 开始</span>
+          </button>
+
           <PWAInstallButton />
         </div>
       </div>
 
+      {/* Feedback Banner after Reset or Course Switch */}
+      {resetBannerMsg && (
+        <div className="mt-3 rounded-2xl bg-[#E2F2EE] border border-[#1E625E]/30 px-4 py-2.5 text-xs font-medium text-[#143D3A] flex items-center justify-between">
+          <span>{resetBannerMsg}</span>
+          <button
+            type="button"
+            onClick={() => setResetBannerMsg(null)}
+            className="text-[#1E625E] hover:underline ml-2"
+          >
+            关闭
+          </button>
+        </div>
+      )}
+
       {/* Top Summary Card with Ring & 3 Metrics (matching Reference Image 2) */}
       <div className="mt-5 rounded-3xl bg-white px-5 py-6 shadow-2xs border border-[#E8ECEA] flex items-center justify-between gap-3">
-        {/* Progress Ring 1/3 */}
+        {/* Progress Ring */}
         <div className="relative w-20 h-20 flex items-center justify-center shrink-0">
           <svg className="w-20 h-20 -rotate-90" viewBox="0 0 76 76">
             <circle
@@ -151,7 +220,18 @@ export const TodayView: React.FC<TodayViewProps> = ({
 
       {/* 今日任务 Section */}
       <div className="mt-7">
-        <h2 className="text-sm font-bold text-[#52605C] mb-3">今日任务</h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-bold text-[#52605C]">
+            今日任务（第 {currentLessonIndex + 1} 课：{currentLesson.titleZh}）
+          </h2>
+          <button
+            type="button"
+            onClick={() => setShowCourseModal(true)}
+            className="text-xs font-semibold text-[#1E625E] hover:underline cursor-pointer"
+          >
+            切换课程 &gt;
+          </button>
+        </div>
 
         <div className="rounded-3xl bg-white border border-[#E8ECEA] shadow-2xs divide-y divide-[#EEF2F0] overflow-hidden">
           {/* Task 1: 词卡复习 */}
@@ -173,18 +253,21 @@ export const TodayView: React.FC<TodayViewProps> = ({
               <button
                 type="button"
                 onClick={onStartFlashcardReview}
-                className="text-left flex-1 min-w-0 cursor-pointer"
+                className="text-left flex-1 min-w-0 flex items-center justify-between gap-2 cursor-pointer"
               >
-                <div
-                  className={`text-lg font-semibold leading-snug ${
-                    taskStatus.cardsDone ? 'text-[#52605C]' : 'text-[#141D1B]'
-                  }`}
-                >
-                  词卡复习
+                <div>
+                  <div
+                    className={`text-lg font-semibold leading-snug ${
+                      taskStatus.cardsDone ? 'text-[#52605C]' : 'text-[#141D1B]'
+                    }`}
+                  >
+                    词卡复习
+                  </div>
+                  <div className="mt-0.5 text-sm text-[#64706D]">
+                    {lessonWordCount} 个核心词 · {taskStatus.cardsDone ? '已完成' : '待学习/复习'}
+                  </div>
                 </div>
-                <div className="mt-0.5 text-sm text-[#64706D]">
-                  8 个词 · {taskStatus.cardsDone ? '已完成' : '待复习'}
-                </div>
+                <ChevronRight className="w-5 h-5 text-[#64706D] shrink-0" />
               </button>
             </div>
           </div>
@@ -207,7 +290,7 @@ export const TodayView: React.FC<TodayViewProps> = ({
 
               <button
                 type="button"
-                onClick={onStartAudioTask}
+                onClick={() => onStartAudioTask(currentLesson.id)}
                 className="text-left flex-1 min-w-0 flex items-center justify-between gap-2 cursor-pointer"
               >
                 <div>
@@ -219,7 +302,7 @@ export const TodayView: React.FC<TodayViewProps> = ({
                     听一段音频
                   </div>
                   <div className="mt-0.5 text-sm text-[#64706D]">
-                    《法句经》偈 2 · 约 10 分钟
+                    《{currentLesson.titleZh}》· 约 {currentLesson.estimatedMinutes} 分钟
                   </div>
                 </div>
                 <ChevronRight className="w-5 h-5 text-[#64706D] shrink-0" />
@@ -245,7 +328,7 @@ export const TodayView: React.FC<TodayViewProps> = ({
 
               <button
                 type="button"
-                onClick={onStartReadingTask}
+                onClick={() => onStartReadingTask(currentLesson.id)}
                 className="text-left flex-1 min-w-0 flex items-center justify-between gap-2 cursor-pointer"
               >
                 <div>
@@ -257,7 +340,7 @@ export const TodayView: React.FC<TodayViewProps> = ({
                     读一段经文
                   </div>
                   <div className="mt-0.5 text-sm text-[#64706D]">
-                    继续《法句经》第 2 章 · 第 5 偈
+                    精读《法句经》{currentLesson.chapterZh}
                   </div>
                 </div>
                 <ChevronRight className="w-5 h-5 text-[#64706D] shrink-0" />
@@ -291,21 +374,18 @@ export const TodayView: React.FC<TodayViewProps> = ({
               <div className="flex items-center justify-between mb-2">
                 <span className="font-bold text-[#141D1B] flex items-center gap-1.5">
                   <AlertTriangle className="w-3.5 h-3.5 text-[#1E625E]" />
-                  <span>根据学习结果重点强化词汇</span>
+                  <span>根据学习结果重点强化词汇（点击试听）</span>
                 </span>
                 <button
                   type="button"
                   onClick={onStartGrammarTask}
-                  className="text-[#1E625E] font-semibold hover:underline"
+                  className="text-[#1E625E] font-semibold hover:underline cursor-pointer"
                 >
                   前往语法练习 ({GRAMMAR_TOPICS.length} 讲)
                 </button>
               </div>
               <div className="flex flex-wrap gap-2">
-                {(difficultCards.length > 0
-                  ? difficultCards
-                  : cards.slice(0, 4)
-                ).map((c) => {
+                {(difficultCards.length > 0 ? difficultCards : cards.slice(0, 4)).map((c) => {
                   const entry = DPD_DICTIONARY[c.lemma];
                   if (!entry) return null;
                   return (
@@ -358,7 +438,7 @@ export const TodayView: React.FC<TodayViewProps> = ({
         )}
       </div>
 
-      {/* Spacer to push primary CTA down matching Reference Image 2 */}
+      {/* Spacer */}
       <div className="flex-1 min-h-8" />
 
       {/* Bottom Primary CTA Button matching Reference Image 2 */}
@@ -372,6 +452,138 @@ export const TodayView: React.FC<TodayViewProps> = ({
           <span>开始今日学习</span>
         </button>
       </div>
+
+      {/* Course / Lesson Selector Modal (选课 / 复习前面的课程) */}
+      {showCourseModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/45 backdrop-blur-xs p-0 sm:p-4"
+          onClick={() => setShowCourseModal(false)}
+        >
+          <div
+            className="w-full max-w-lg rounded-t-3xl sm:rounded-3xl bg-white p-6 shadow-2xl border border-[#E6EBE8] max-h-[85vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-4 border-b border-[#EEF2F0]">
+              <div>
+                <h3 className="text-lg font-bold text-[#141D1B]">选择学习课程 / 复习前面章节</h3>
+                <p className="text-xs text-[#64706D] mt-0.5">
+                  切换后，今日任务中的词卡、音频与经文阅读将同步切换至所选课程
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCourseModal(false)}
+                className="p-2 rounded-full text-[#64706D] hover:bg-[#F5F6F4] hover:text-[#141D1B]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-2.5">
+              {SUTTAS.map((sutta, idx) => {
+                const isSelected = sutta.id === currentLesson.id;
+                return (
+                  <div
+                    key={sutta.id}
+                    onClick={async () => {
+                      await onSelectLesson(sutta.id);
+                      setShowCourseModal(false);
+                      setResetBannerMsg(`已切换至「第 ${idx + 1} 课：${sutta.titleZh}」，可随时复习或跟读。`);
+                    }}
+                    className={`rounded-2xl p-4 border transition-all cursor-pointer flex items-start justify-between gap-3 ${
+                      isSelected
+                        ? 'bg-[#EBF3F1] border-[1.5px] border-[#1E625E]'
+                        : 'bg-white border-[#E6EBE8] hover:border-[#B8CCC8]'
+                    }`}
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-md bg-[#1E625E] text-white text-[11px] font-bold px-2 py-0.5">
+                          第 {idx + 1} 课
+                        </span>
+                        <span className="text-base font-bold text-[#141D1B]">{sutta.titleZh}</span>
+                        <span className="text-xs text-[#64706D]">({sutta.code})</span>
+                      </div>
+                      <p className="text-xs text-[#52605C]">{sutta.chapterZh}</p>
+                      <p className="font-pali text-sm text-[#141D1B] pt-1">
+                        {sutta.sentences[0]?.paliText}
+                      </p>
+                    </div>
+                    {isSelected && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-[#1E625E] text-white px-2.5 py-1 text-xs font-semibold shrink-0">
+                        <Check className="w-3.5 h-3.5" />
+                        <span>当前课</span>
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reset Progress Confirmation Modal (从 0 开始学) */}
+      {showResetModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-xs p-4"
+          onClick={() => setShowResetModal(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl border border-[#E6EBE8]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-[#141D1B]">重置学习进度</h3>
+              <button
+                type="button"
+                onClick={() => setShowResetModal(false)}
+                className="p-1.5 rounded-full text-[#64706D] hover:bg-[#F5F6F4]"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="mt-2.5 text-sm text-[#52605C] leading-relaxed">
+              你可以选择<strong>「从 0 开始学习」</strong>（清空已掌握词数、连续天数归零、回到第 1 课《法句经》偈 1），或者恢复初始的 12 天示例数据：
+            </p>
+
+            <div className="mt-5 space-y-2.5">
+              <button
+                type="button"
+                onClick={async () => {
+                  await onResetToZero();
+                  setShowResetModal(false);
+                  setResetBannerMsg('已重置为从 0 开始！现在可以从第 1 课《法句经》偈 1 开始学习。');
+                }}
+                className="w-full rounded-2xl bg-[#1E625E] py-3 px-4 text-sm font-bold text-white hover:bg-[#174E4A] transition-colors cursor-pointer"
+              >
+                确认从 0 开始学（清空进度）
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  await onRestoreSample();
+                  setShowResetModal(false);
+                  setResetBannerMsg('已恢复 12 天示例学习进度。');
+                }}
+                className="w-full rounded-2xl border border-[#CEDAD7] bg-[#EBF3F1] py-3 px-4 text-sm font-semibold text-[#1E625E] hover:bg-[#DDF0ED] transition-colors cursor-pointer"
+              >
+                恢复 12 天示例进度
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowResetModal(false)}
+                className="w-full rounded-2xl bg-[#F5F6F4] py-2.5 px-4 text-xs font-medium text-[#64706D] hover:text-[#141D1B] transition-colors cursor-pointer"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

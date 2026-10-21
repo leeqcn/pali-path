@@ -146,16 +146,17 @@ export async function rateFlashcard(lemma: string, rating: CardRating): Promise<
 export async function ensureSeededDatabase(): Promise<void> {
   const seeded = await db.meta.get('initialized_v1');
   if (seeded) return;
+  await restoreSampleProgress();
+}
 
+export async function restoreSampleProgress(): Promise<void> {
   const now = Date.now();
   const allLemmas = Object.keys(DPD_DICTIONARY);
 
-  // Order by frequency rank
   const sortedLemmas = [...allLemmas].sort(
     (a, b) => DPD_DICTIONARY[a].frequencyRank - DPD_DICTIONARY[b].frequencyRank
   );
 
-  // Create initial 8 due review cards (with manopubbaṅgama at index 2 so 3/8 can be showcased, or all 8 ready)
   const initialDueLemmas = [
     'dhamma',
     'manas',
@@ -183,8 +184,10 @@ export async function ensureSeededDatabase(): Promise<void> {
     };
   });
 
+  await db.cards.clear();
   await db.cards.bulkPut(cardsToInsert);
 
+  await db.suttaProgress.clear();
   await db.suttaProgress.put({
     suttaId: 'dhp-1',
     readSentenceIds: ['dhp-1-1'],
@@ -196,8 +199,61 @@ export async function ensureSeededDatabase(): Promise<void> {
   await db.meta.bulkPut([
     { key: 'initialized_v1', value: true },
     { key: 'streakDays', value: 12 },
-    { key: 'baseMasteredOffset', value: 37 }, // 37 prior basic words + 8 mastered in table = 45 mastered words
+    { key: 'baseMasteredOffset', value: 37 },
+    { key: 'selectedLessonId', value: 'dhp-1' },
     { key: 'task_cards_done', value: true },
+    { key: 'task_audio_done', value: false },
+    { key: 'task_reading_done', value: false },
+  ]);
+}
+
+// Reset all progress to 0 so the user can study from scratch (从 0 开始学)
+export async function resetToZeroProgress(): Promise<void> {
+  const now = Date.now();
+  const allLemmas = Object.keys(DPD_DICTIONARY);
+
+  const sortedLemmas = [...allLemmas].sort(
+    (a, b) => DPD_DICTIONARY[a].frequencyRank - DPD_DICTIONARY[b].frequencyRank
+  );
+
+  // Put the first 8 Lesson 1 words into today's new learning queue, everything else 'new' and not yet mastered
+  const lesson1Lemmas = [
+    'manopubbaṅgama',
+    'dhamma',
+    'manoseṭṭha',
+    'manomaya',
+    'manas',
+    'ce',
+    'paduṭṭha',
+    'bhāsati',
+  ];
+
+  const freshCards: FlashcardRecord[] = sortedLemmas.map((lemma, idx) => {
+    const isFirstBatch = lesson1Lemmas.includes(lemma);
+    return {
+      lemma,
+      status: isFirstBatch ? 'learning' : 'new',
+      intervalDays: 0,
+      easeFactor: 2.5,
+      repetitions: 0,
+      lapses: 0,
+      dueTimestamp: now,
+      inDeck: isFirstBatch,
+      addedAt: now - idx * 1000,
+    };
+  });
+
+  await db.cards.clear();
+  await db.cards.bulkPut(freshCards);
+  await db.suttaProgress.clear();
+  await db.grammarAttempts.clear();
+
+  await db.meta.bulkPut([
+    { key: 'initialized_v1', value: true },
+    { key: 'streakDays', value: 0 },
+    { key: 'baseMasteredOffset', value: 0 },
+    { key: 'selectedLessonId', value: 'dhp-1' },
+    { key: 'task_cards_done', value: false },
     { key: 'task_audio_done', value: false },
     { key: 'task_reading_done', value: false },
   ]);

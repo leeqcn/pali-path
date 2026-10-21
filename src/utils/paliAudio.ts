@@ -1,147 +1,189 @@
-// Pāli Audio & Recitation Engine
-// Supports Web Speech API phonetic synthesis + Web Audio API resonant chanting cadence fallback for 100% offline reliability
+// Pāli Human Voice Pronunciation & Recitation Engine
+// 1. Supports real MP3 audio recordings (<audio>) when an audioUrl is configured
+// 2. Uses Browser Web Speech API (speechSynthesis) with Indic/Pure-Vowel human voice selection and accurate IAST Pāli phonetic mapping
+// 3. Fixes Chrome/Safari speechSynthesis.cancel() race condition and preloads voices on voiceschanged
 
-let activeTimer: number | null = null;
-let audioCtx: AudioContext | null = null;
+let htmlAudio: HTMLAudioElement | null = null;
+let speakTimeout: number | null = null;
+let cachedVoices: SpeechSynthesisVoice[] = [];
+const currentListeners: Set<(playing: boolean, label?: string) => void> = new Set();
 
-function getAudioContext(): AudioContext | null {
-  if (typeof window === 'undefined') return null;
-  if (!audioCtx) {
-    const AudioContextClass =
-      window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (AudioContextClass) {
-      audioCtx = new AudioContextClass();
+if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+  const loadVoices = () => {
+    const v = window.speechSynthesis.getVoices();
+    if (v.length > 0) {
+      cachedVoices = v;
     }
-  }
-  if (audioCtx && audioCtx.state === 'suspended') {
-    audioCtx.resume().catch(() => {});
-  }
-  return audioCtx;
+  };
+  loadVoices();
+  window.speechSynthesis.onvoiceschanged = loadVoices;
 }
 
-// Convert IAST Pāli diacritics to phonetic approximation for speech synthesis
-function paliToPhonetic(pali: string): string {
+export function subscribeAudioStatus(cb: (playing: boolean, label?: string) => void): () => void {
+  currentListeners.add(cb);
+  return () => {
+    currentListeners.delete(cb);
+  };
+}
+
+function notifyAudioStatus(playing: boolean, label?: string) {
+  currentListeners.forEach((cb) => cb(playing, label));
+}
+
+// Convert IAST Pāli text into natural phonetic syllables for human TTS engines
+export function paliToPhonetic(pali: string): string {
   return pali
     .toLowerCase()
+    // Preserve natural Pāli phrasing pauses
+    .replace(/;/g, ', ')
+    // Palatal & retroflex stops/nasals
+    .replace(/ṅg/g, 'ng-g')
+    .replace(/ṅk/g, 'ng-k')
     .replace(/ṅ/g, 'ng')
+    .replace(/ñc/g, 'ny-ch')
+    .replace(/ñj/g, 'ny-j')
+    .replace(/ññ/g, 'n-ny')
     .replace(/ñ/g, 'ny')
+    .replace(/ṭṭh/g, 't-th')
     .replace(/ṭh/g, 'th')
     .replace(/ṭ/g, 't')
+    .replace(/ḍḍh/g, 'd-dh')
     .replace(/ḍh/g, 'dh')
     .replace(/ḍ/g, 'd')
+    .replace(/ṇh/g, 'nh')
     .replace(/ṇ/g, 'n')
+    .replace(/ḷh/g, 'lh')
     .replace(/ḷ/g, 'l')
     .replace(/ṃ/g, 'ng')
+    // Pāli 'c' is always unaspirated palatal affricate [tʃ] (like 'ch' in church)
+    .replace(/cc/g, 't-ch')
+    .replace(/ch/g, 'chh')
+    .replace(/c/g, 'ch')
+    // Long vowels
     .replace(/ā/g, 'aa')
-    .replace(/ī/g, 'ii')
-    .replace(/ū/g, 'uu')
-    .replace(/c/g, 'ch');
+    .replace(/ī/g, 'ee')
+    .replace(/ū/g, 'oo');
 }
 
-// Play a subtle, warm resonant syllable chime (monastic chanting cadence) using Web Audio API
-function playSyllableCadence(text: string, rate = 1.0, onEnd?: () => void) {
-  const ctx = getAudioContext();
-  const clean = text.replace(/[.,;!?]/g, '').trim();
-  const syllables = clean.match(/[aeiouāīū]+/gi) || ['a', 'a'];
-  const stepMs = Math.max(110, Math.round(190 / rate));
-
-  if (ctx) {
-    // Traditional Pāli chanting uses a calm tonic + major second / minor third cadence (e.g. D3 / E3 / F3)
-    const freqs = [293.66, 329.63, 349.23, 329.63]; // D4, E4, F4, E4
-    syllables.slice(0, 18).forEach((syl, idx) => {
-      const startTime = ctx.currentTime + (idx * stepMs) / 1000;
-      const isLong = /[āīū]/i.test(syl);
-      const duration = ((isLong ? stepMs * 1.45 : stepMs * 0.9) / 1000);
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(freqs[idx % freqs.length], startTime);
-
-      gain.gain.setValueAtTime(0.001, startTime);
-      gain.gain.exponentialRampToValueAtTime(0.06, startTime + 0.025);
-      gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
-
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-
-      osc.start(startTime);
-      osc.stop(startTime + duration + 0.02);
-    });
+function pickBestPaliVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | undefined {
+  if (!voices || voices.length === 0) return undefined;
+  // Priority 1: Hindi / Sanskrit / Indonesian / Thai / Italian / Spanish (pure monophthong vowels closest to Pāli)
+  const priorityLangs = ['hi-in', 'sa-in', 'id-id', 'th-th', 'it-it', 'es-es', 'en-in', 'en-gb', 'en-us'];
+  for (const langPrefix of priorityLangs) {
+    const match = voices.find((v) => v.lang.toLowerCase().replace('_', '-').startsWith(langPrefix));
+    if (match) return match;
   }
-
-  const totalMs = Math.min(18, syllables.length) * stepMs + 150;
-  if (activeTimer) window.clearTimeout(activeTimer);
-  activeTimer = window.setTimeout(() => {
-    activeTimer = null;
-    onEnd?.();
-  }, totalMs);
+  // Priority 2: Any non-local default or first available voice
+  return voices.find((v) => v.default) ?? voices[0];
 }
 
 export function stopPaliAudio(): void {
+  if (speakTimeout !== null) {
+    window.clearTimeout(speakTimeout);
+    speakTimeout = null;
+  }
   if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-    window.speechSynthesis.cancel();
+    if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+      window.speechSynthesis.cancel();
+    }
   }
-  if (activeTimer !== null) {
-    window.clearTimeout(activeTimer);
-    activeTimer = null;
+  if (htmlAudio) {
+    htmlAudio.pause();
+    htmlAudio.currentTime = 0;
+    htmlAudio = null;
   }
+  notifyAudioStatus(false);
 }
 
 export function speakPaliText(
   paliText: string,
   options?: {
     rate?: number;
+    audioUrl?: string;
     onEnd?: () => void;
   }
 ): void {
-  const rate = options?.rate ?? 0.9;
+  const rate = options?.rate ?? 1.0;
   stopPaliAudio();
+  notifyAudioStatus(true, paliText);
 
-  // Always play gentle acoustic cadence so user gets immediate tactile audio feedback even if OS TTS is muted/unavailable
-  const hasSpeech = typeof window !== 'undefined' && 'speechSynthesis' in window;
-
-  if (hasSpeech) {
+  // 1. If a real recorded MP3 URL is provided, play it via HTML5 Audio
+  if (options?.audioUrl) {
     try {
-      const voices = window.speechSynthesis.getVoices();
-      const utterance = new SpeechSynthesisUtterance(paliToPhonetic(paliText));
-      // Prefer South/Southeast Asian or clear English/Italian/Spanish phonetic voice
-      const preferredVoice =
-        voices.find((v) => /hi-IN|id-ID|th-TH|it-IT|es-ES|en-GB/i.test(v.lang)) || voices[0];
-      if (preferredVoice) {
-        utterance.voice = preferredVoice;
-        utterance.lang = preferredVoice.lang;
-      } else {
-        utterance.lang = 'it-IT'; // Pure vowels close to Pāli
-      }
-      utterance.rate = Math.max(0.6, Math.min(1.5, rate * 0.85));
-      utterance.pitch = 0.95;
-
-      let finished = false;
-      const done = () => {
-        if (!finished) {
-          finished = true;
-          options?.onEnd?.();
-        }
+      const audio = new Audio(options.audioUrl);
+      audio.playbackRate = rate;
+      htmlAudio = audio;
+      audio.onended = () => {
+        htmlAudio = null;
+        notifyAudioStatus(false);
+        options?.onEnd?.();
       };
-
-      utterance.onend = done;
-      utterance.onerror = () => {
-        playSyllableCadence(paliText, rate, done);
+      audio.onerror = () => {
+        htmlAudio = null;
+        speakWithHumanTTS(paliText, rate, options?.onEnd);
       };
-
-      // Also play subtle harmonic tone alongside speech or fallback if speech doesn't fire within 4s
-      playSyllableCadence(paliText, rate, () => {
-        if (!window.speechSynthesis.speaking) {
-          done();
-        }
+      audio.play().catch(() => {
+        htmlAudio = null;
+        speakWithHumanTTS(paliText, rate, options?.onEnd);
       });
-      window.speechSynthesis.speak(utterance);
       return;
     } catch {
-      // Fallback to Web Audio cadence
+      // Fallback to speechSynthesis
     }
   }
 
-  playSyllableCadence(paliText, rate, options?.onEnd);
+  // 2. Speak using human TTS voice (with 40ms delay after cancel() to avoid Chrome bug)
+  speakTimeout = window.setTimeout(() => {
+    speakTimeout = null;
+    speakWithHumanTTS(paliText, rate, options?.onEnd);
+  }, 40);
+}
+
+function speakWithHumanTTS(paliText: string, rate: number, onEnd?: () => void) {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+    notifyAudioStatus(false);
+    onEnd?.();
+    return;
+  }
+
+  try {
+    const voices =
+      cachedVoices.length > 0 ? cachedVoices : window.speechSynthesis.getVoices();
+    const phoneticText = paliToPhonetic(paliText);
+    const utterance = new SpeechSynthesisUtterance(phoneticText);
+
+    const bestVoice = pickBestPaliVoice(voices);
+    if (bestVoice) {
+      utterance.voice = bestVoice;
+      utterance.lang = bestVoice.lang;
+    } else {
+      utterance.lang = 'en-GB';
+    }
+
+    // Slightly measured cadence for clear Pāli syllable articulation
+    utterance.rate = Math.max(0.55, Math.min(1.4, rate * 0.82));
+    utterance.pitch = 0.96;
+    utterance.volume = 1.0;
+
+    let finished = false;
+    const finish = () => {
+      if (!finished) {
+        finished = true;
+        notifyAudioStatus(false);
+        onEnd?.();
+      }
+    };
+
+    utterance.onend = finish;
+    utterance.onerror = finish;
+
+    window.speechSynthesis.speak(utterance);
+
+    // Safety fallback timer in case browser TTS doesn't fire onend
+    const estimatedMs = Math.max(1800, paliText.length * 95);
+    speakTimeout = window.setTimeout(finish, estimatedMs);
+  } catch {
+    notifyAudioStatus(false);
+    onEnd?.();
+  }
 }

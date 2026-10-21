@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlignLeft, BookOpen, CheckCircle2, Layers } from 'lucide-react';
+import { AlignLeft, BookOpen, CheckCircle2, Layers, Volume2 } from 'lucide-react';
 import { FlashcardsView } from './components/FlashcardsView';
 import { GrammarView } from './components/GrammarView';
 import { InflectionModal } from './components/InflectionModal';
@@ -10,12 +10,14 @@ import type { DpdWordEntry } from './data/paliData';
 import {
   db,
   ensureSeededDatabase,
+  resetToZeroProgress,
+  restoreSampleProgress,
   type FlashcardRecord,
   type GrammarAttemptRecord,
 } from './db/database';
-import { stopPaliAudio } from './utils/paliAudio';
+import { stopPaliAudio, subscribeAudioStatus } from './utils/paliAudio';
 
-type ActiveTab = 'today' | 'cards' | 'reader' | 'grammar';
+type ActiveTab = 'today' | 'cards' | 'grammar' | 'reader';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('today');
@@ -23,6 +25,7 @@ export function App() {
   const [grammarAttempts, setGrammarAttempts] = useState<GrammarAttemptRecord[]>([]);
   const [streakDays, setStreakDays] = useState<number>(12);
   const [baseMasteredOffset, setBaseMasteredOffset] = useState<number>(37);
+  const [selectedLessonId, setSelectedLessonId] = useState<string>('dhp-1');
   const [taskStatus, setTaskStatus] = useState({
     cardsDone: true,
     audioDone: false,
@@ -31,12 +34,19 @@ export function App() {
 
   const [selectedSuttaId, setSelectedSuttaId] = useState<string>('dhp-1');
   const [autoPlayAudioOnReader, setAutoPlayAudioOnReader] = useState<boolean>(false);
+  const [activeAudioLabel, setActiveAudioLabel] = useState<string | null>(null);
 
   // Modal state for DPD inflection tables
   const [inflectionModalEntry, setInflectionModalEntry] = useState<DpdWordEntry | null>(null);
   const [inflectionHighlightForm, setInflectionHighlightForm] = useState<string | undefined>(
     undefined
   );
+
+  useEffect(() => {
+    return subscribeAudioStatus((playing, label) => {
+      setActiveAudioLabel(playing ? (label ?? '巴利语吟诵中...') : null);
+    });
+  }, []);
 
   const loadAllFromIndexedDB = useCallback(async () => {
     await ensureSeededDatabase();
@@ -54,6 +64,11 @@ export function App() {
     }
     if (typeof metaMap.get('baseMasteredOffset') === 'number') {
       setBaseMasteredOffset(metaMap.get('baseMasteredOffset') as number);
+    }
+    if (typeof metaMap.get('selectedLessonId') === 'string') {
+      const savedLesson = metaMap.get('selectedLessonId') as string;
+      setSelectedLessonId(savedLesson);
+      setSelectedSuttaId(savedLesson);
     }
     setTaskStatus({
       cardsDone: Boolean(metaMap.get('task_cards_done') ?? true),
@@ -82,6 +97,11 @@ export function App() {
       if (typeof metaMap.get('baseMasteredOffset') === 'number') {
         setBaseMasteredOffset(metaMap.get('baseMasteredOffset') as number);
       }
+      if (typeof metaMap.get('selectedLessonId') === 'string') {
+        const savedLesson = metaMap.get('selectedLessonId') as string;
+        setSelectedLessonId(savedLesson);
+        setSelectedSuttaId(savedLesson);
+      }
       setTaskStatus({
         cardsDone: Boolean(metaMap.get('task_cards_done') ?? true),
         audioDone: Boolean(metaMap.get('task_audio_done') ?? false),
@@ -92,6 +112,25 @@ export function App() {
       cancelled = true;
     };
   }, []);
+
+  const handleSelectLesson = async (suttaId: string) => {
+    await db.meta.put({ key: 'selectedLessonId', value: suttaId });
+    setSelectedLessonId(suttaId);
+    setSelectedSuttaId(suttaId);
+    await loadAllFromIndexedDB();
+  };
+
+  const handleResetToZero = async () => {
+    stopPaliAudio();
+    await resetToZeroProgress();
+    await loadAllFromIndexedDB();
+  };
+
+  const handleRestoreSample = async () => {
+    stopPaliAudio();
+    await restoreSampleProgress();
+    await loadAllFromIndexedDB();
+  };
 
   const handleToggleTaskDone = async (
     key: 'task_cards_done' | 'task_audio_done' | 'task_reading_done'
@@ -119,9 +158,17 @@ export function App() {
   }, [cards, baseMasteredOffset]);
 
   const suttaCoveragePct = useMemo(() => {
+    const masteredInDb = cards.filter((c) => c.status === 'mastered').length;
+    const reviewedInDb = cards.filter((c) => c.repetitions > 0 || c.status === 'mastered').length;
+    if (baseMasteredOffset === 0 && masteredInDb === 0 && reviewedInDb === 0) {
+      return 0;
+    }
+    if (baseMasteredOffset === 0) {
+      return Math.min(100, Math.round((reviewedInDb / Math.max(1, cards.length)) * 100));
+    }
     const inDeckCount = cards.filter((c) => c.inDeck || c.status === 'mastered').length;
     return Math.min(98, Math.max(82, Math.round(70 + inDeckCount * 0.75)));
-  }, [cards]);
+  }, [cards, baseMasteredOffset]);
 
   const handleSwitchTab = (tab: ActiveTab) => {
     stopPaliAudio();
@@ -138,6 +185,14 @@ export function App() {
     <div className="min-h-svh bg-[#F5F6F4] text-[#141D1B] selection:bg-[#DDF0ED]">
       <OfflineIndicator />
 
+      {/* Live Audio Playing Indicator */}
+      {activeAudioLabel && (
+        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full bg-[#16211F] px-4 py-1.5 text-xs font-medium text-[#E2EFED] shadow-lg max-w-[90vw]">
+          <Volume2 className="w-3.5 h-3.5 text-[#5ED4C8] shrink-0" />
+          <span className="truncate font-pali">正在朗读：{activeAudioLabel}</span>
+        </div>
+      )}
+
       {/* Main Content Area */}
       <main className="w-full">
         {activeTab === 'today' && (
@@ -147,16 +202,20 @@ export function App() {
             streakDays={streakDays}
             masteredCount={masteredCount}
             suttaCoveragePct={suttaCoveragePct}
+            selectedLessonId={selectedLessonId}
+            onSelectLesson={handleSelectLesson}
+            onResetToZero={handleResetToZero}
+            onRestoreSample={handleRestoreSample}
             taskStatus={taskStatus}
             onToggleTaskDone={handleToggleTaskDone}
             onStartFlashcardReview={() => handleSwitchTab('cards')}
-            onStartAudioTask={() => {
-              setSelectedSuttaId('dhp-2');
+            onStartAudioTask={(suttaId) => {
+              setSelectedSuttaId(suttaId);
               setAutoPlayAudioOnReader(true);
               setActiveTab('reader');
             }}
-            onStartReadingTask={() => {
-              setSelectedSuttaId('dhp-1');
+            onStartReadingTask={(suttaId) => {
+              setSelectedSuttaId(suttaId);
               setAutoPlayAudioOnReader(false);
               setActiveTab('reader');
             }}
@@ -167,8 +226,17 @@ export function App() {
         {activeTab === 'cards' && (
           <FlashcardsView
             cards={cards}
+            selectedLessonId={selectedLessonId}
             onCardsUpdated={loadAllFromIndexedDB}
             onCloseReviewToToday={() => handleSwitchTab('today')}
+            onOpenInflection={handleOpenInflection}
+          />
+        )}
+
+        {activeTab === 'grammar' && (
+          <GrammarView
+            attempts={grammarAttempts}
+            onAttemptsUpdated={loadAllFromIndexedDB}
             onOpenInflection={handleOpenInflection}
           />
         )}
@@ -184,17 +252,9 @@ export function App() {
             autoPlayOnMount={autoPlayAudioOnReader}
           />
         )}
-
-        {activeTab === 'grammar' && (
-          <GrammarView
-            attempts={grammarAttempts}
-            onAttemptsUpdated={loadAllFromIndexedDB}
-            onOpenInflection={handleOpenInflection}
-          />
-        )}
       </main>
 
-      {/* Bottom Navigation Bar matching Reference Images 2 & 3 */}
+      {/* Bottom Navigation Bar (Order: 今日 | 词卡 | 语法 | 阅读) */}
       <nav
         aria-label="主导航"
         className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-[#E6EBE8]"
@@ -240,25 +300,6 @@ export function App() {
 
           <button
             type="button"
-            onClick={() => handleSwitchTab('reader')}
-            className={`flex flex-col items-center justify-center h-full transition-colors cursor-pointer ${
-              activeTab === 'reader' ? 'text-[#1E625E]' : 'text-[#64706D] hover:text-[#141D1B]'
-            }`}
-          >
-            <BookOpen
-              className={`w-6 h-6 ${activeTab === 'reader' ? 'stroke-[2.2]' : 'stroke-[1.75]'}`}
-            />
-            <span
-              className={`text-xs mt-1 ${
-                activeTab === 'reader' ? 'font-bold' : 'font-medium'
-              }`}
-            >
-              阅读
-            </span>
-          </button>
-
-          <button
-            type="button"
             onClick={() => handleSwitchTab('grammar')}
             className={`flex flex-col items-center justify-center h-full transition-colors cursor-pointer ${
               activeTab === 'grammar' ? 'text-[#1E625E]' : 'text-[#64706D] hover:text-[#141D1B]'
@@ -273,6 +314,25 @@ export function App() {
               }`}
             >
               语法
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleSwitchTab('reader')}
+            className={`flex flex-col items-center justify-center h-full transition-colors cursor-pointer ${
+              activeTab === 'reader' ? 'text-[#1E625E]' : 'text-[#64706D] hover:text-[#141D1B]'
+            }`}
+          >
+            <BookOpen
+              className={`w-6 h-6 ${activeTab === 'reader' ? 'stroke-[2.2]' : 'stroke-[1.75]'}`}
+            />
+            <span
+              className={`text-xs mt-1 ${
+                activeTab === 'reader' ? 'font-bold' : 'font-medium'
+              }`}
+            >
+              阅读
             </span>
           </button>
         </div>
