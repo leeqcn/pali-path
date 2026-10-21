@@ -45,22 +45,33 @@ export const SuttaReaderView: React.FC<SuttaReaderViewProps> = ({
     [selectedSuttaId]
   );
 
+  const [selectedCategory, setSelectedCategory] = useState<'all' | 'dhammapada' | 'khuddakapatha'>('all');
   const [activeSentenceIdx, setActiveSentenceIdx] = useState(0);
-  // First sentence translation visible by default (matching Image 3), second sentence toggleable via "显示译文"
-  const [visibleTranslations, setVisibleTranslations] = useState<Record<string, boolean>>({
-    'dhp-1-1': true,
-    'dhp-2-1': true,
-    'dhp-5-1': true,
-    'dhp-21-1': true,
-  });
+  // First sentence of each Sutta visible by default (matching Image 3), other sentences toggleable via "显示译文"
+  const [visibleTranslations, setVisibleTranslations] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(
+      SUTTAS.map((s) => [s.sentences[0]?.id, true]).filter(([id]) => Boolean(id))
+    )
+  );
 
-  // Default selected word is Manopubbaṅgamā in Dhp 1.1 (matching Image 3)
+  // Default selected word is first token of current Sutta (Manopubbaṅgamā in Dhp 1.1, matching Image 3)
   const [selectedToken, setSelectedToken] = useState<SuttaToken>(
     currentSutta.sentences[0]?.tokens[0]
   );
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [loopAudio, setLoopAudio] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1.0);
+
+  const handleSwitchSutta = (sutta: SuttaItem) => {
+    stopPaliAudio();
+    setIsPlayingAudio(false);
+    onSelectSuttaId(sutta.id);
+    setActiveSentenceIdx(0);
+    if (sutta.sentences[0]?.tokens[0]) {
+      setSelectedToken(sutta.sentences[0].tokens[0]);
+    }
+    setShowSuttaList(false);
+  };
 
   const handlePlaySentence = async (sentenceIdx: number, suttaOverride?: SuttaItem) => {
     const targetSutta = suttaOverride ?? currentSutta;
@@ -173,38 +184,66 @@ export const SuttaReaderView: React.FC<SuttaReaderViewProps> = ({
   };
 
   if (showSuttaList) {
+    const filteredSuttas = SUTTAS.filter((s) =>
+      selectedCategory === 'all' ? true : s.category === selectedCategory
+    );
+
     return (
       <div className="max-w-2xl mx-auto px-4 pt-5 pb-28">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-3">
           <div>
-            <h1 className="text-2xl font-bold text-[#141D1B]">巴利经典文库</h1>
+            <h1 className="text-2xl font-bold text-[#141D1B]">巴利经典独立阅读文库</h1>
             <p className="text-xs text-[#64706D] mt-0.5">
-              数据源：SuttaCentral (bilara-data) 与 Chaṭṭha Saṅgāyana Tipiṭaka (CST)
+              独立于阶梯课程 · 按原典自由选读 · 共 {SUTTAS.length} 篇经典 / {Object.keys(DPD_DICTIONARY).length} 核心词根
             </p>
           </div>
           <button
             type="button"
             onClick={() => setShowSuttaList(false)}
-            className="rounded-xl bg-[#EBF3F1] px-3.5 py-2 text-xs font-semibold text-[#1E625E] hover:bg-[#DDF0ED]"
+            className="rounded-xl bg-[#EBF3F1] px-3.5 py-2 text-xs font-semibold text-[#1E625E] hover:bg-[#DDF0ED] cursor-pointer"
           >
             返回当前经文
           </button>
         </div>
 
+        {/* Category Filter Tabs */}
+        <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-1">
+          {[
+            { id: 'all' as const, label: `全部经典 (${SUTTAS.length})` },
+            {
+              id: 'dhammapada' as const,
+              label: `《法句经》 Dhammapada (${SUTTAS.filter((s) => s.category === 'dhammapada').length})`,
+            },
+            {
+              id: 'khuddakapatha' as const,
+              label: `《小诵》 Khuddakapāṭha (${SUTTAS.filter((s) => s.category === 'khuddakapatha').length})`,
+            },
+          ].map((tab) => {
+            const active = selectedCategory === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setSelectedCategory(tab.id)}
+                className={`rounded-xl px-3.5 py-2 text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer ${
+                  active
+                    ? 'bg-[#1E625E] text-white'
+                    : 'bg-white text-[#52605C] border border-[#E2EAE7] hover:bg-[#EBF3F1]'
+                }`}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+
         <div className="space-y-3">
-          {SUTTAS.map((sutta) => {
+          {filteredSuttas.map((sutta) => {
             const isCurrent = sutta.id === currentSutta.id;
             return (
               <div
                 key={sutta.id}
-                onClick={() => {
-                  onSelectSuttaId(sutta.id);
-                  setActiveSentenceIdx(0);
-                  if (sutta.sentences[0]?.tokens[0]) {
-                    setSelectedToken(sutta.sentences[0].tokens[0]);
-                  }
-                  setShowSuttaList(false);
-                }}
+                onClick={() => handleSwitchSutta(sutta)}
                 className={`rounded-3xl p-5 bg-white border transition-all cursor-pointer ${
                   isCurrent
                     ? 'border-[1.5px] border-[#1E625E] shadow-xs'
@@ -213,16 +252,20 @@ export const SuttaReaderView: React.FC<SuttaReaderViewProps> = ({
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-lg font-bold text-[#141D1B]">{sutta.titleZh}</span>
-                      <span className="text-xs text-[#64706D]">· {sutta.code}</span>
+                      <span className="text-xs font-semibold text-[#1E625E] bg-[#EBF3F1] px-2 py-0.5 rounded-md">
+                        {sutta.code}
+                      </span>
                     </div>
                     <p className="font-pali text-sm text-[#52605C] mt-0.5">{sutta.titlePali}</p>
-                    <p className="text-xs text-[#64706D] mt-2">{sutta.chapterZh}</p>
+                    <p className="text-xs text-[#64706D] mt-1.5">
+                      {sutta.chapterZh} · 共 {sutta.sentences.length} 句
+                    </p>
                   </div>
                   <span className="inline-flex items-center gap-1 rounded-full bg-[#EBF3F1] px-3 py-1 text-xs font-semibold text-[#1E625E] shrink-0">
                     <Headphones className="w-3.5 h-3.5" />
-                    <span>含吟诵音频</span>
+                    <span>逐词精校</span>
                   </span>
                 </div>
                 <p className="mt-3 font-pali text-base text-[#141D1B] line-clamp-1 bg-[#F5F6F4] px-3.5 py-2 rounded-xl">
@@ -496,17 +539,48 @@ export const SuttaReaderView: React.FC<SuttaReaderViewProps> = ({
         </div>
       </div>
 
-      {/* Sutta Switcher Bar */}
-      <div className="mt-4 flex items-center justify-between text-xs text-[#64706D] px-1">
-        <span>诵读音频：{currentSutta.audioSource}</span>
-        <button
-          type="button"
-          onClick={() => setShowSuttaList(true)}
-          className="inline-flex items-center gap-1 font-semibold text-[#1E625E] hover:underline"
-        >
-          <BookOpen className="w-3.5 h-3.5" />
-          <span>切换经文 ({SUTTAS.length} 部)</span>
-        </button>
+      {/* Sutta Switcher & Prev/Next Lesson Navigation */}
+      <div className="mt-4 space-y-2.5 px-1">
+        <div className="flex items-center justify-between gap-2">
+          {(() => {
+            const currentIdx = SUTTAS.findIndex((s) => s.id === currentSutta.id);
+            const prevSutta = currentIdx > 0 ? SUTTAS[currentIdx - 1] : null;
+            const nextSutta =
+              currentIdx >= 0 && currentIdx < SUTTAS.length - 1 ? SUTTAS[currentIdx + 1] : null;
+            return (
+              <>
+                <button
+                  type="button"
+                  disabled={!prevSutta}
+                  onClick={() => prevSutta && handleSwitchSutta(prevSutta)}
+                  className="rounded-xl bg-white border border-[#E2EAE7] px-3 py-2 text-xs font-semibold text-[#2C3735] hover:bg-[#EBF3F1] disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
+                >
+                  ← 上一课：{prevSutta ? prevSutta.code : '无'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowSuttaList(true)}
+                  className="inline-flex items-center gap-1 rounded-xl bg-[#EBF3F1] px-3.5 py-2 text-xs font-semibold text-[#1E625E] hover:bg-[#DDF0ED] cursor-pointer"
+                >
+                  <BookOpen className="w-3.5 h-3.5" />
+                  <span>经典目录 ({SUTTAS.length} 课)</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={!nextSutta}
+                  onClick={() => nextSutta && handleSwitchSutta(nextSutta)}
+                  className="rounded-xl bg-white border border-[#E2EAE7] px-3 py-2 text-xs font-semibold text-[#2C3735] hover:bg-[#EBF3F1] disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
+                >
+                  下一课：{nextSutta ? nextSutta.code : '无'} →
+                </button>
+              </>
+            );
+          })()}
+        </div>
+        <div className="flex items-center justify-between text-[11px] text-[#7A8783]">
+          <span>数据源：{currentSutta.collection}</span>
+          <span>音频参考：{currentSutta.audioSource}</span>
+        </div>
       </div>
 
       {/* Fixed Dark Audio Player Bar above Bottom Nav (matching Reference Image 3) */}

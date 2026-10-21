@@ -1,5 +1,12 @@
 import React, { useState } from 'react';
-import { AlertCircle, CheckCircle2, ChevronRight, HelpCircle, RotateCcw, Volume2 } from 'lucide-react';
+import {
+  AlertCircle,
+  CheckCircle2,
+  ChevronRight,
+  HelpCircle,
+  RotateCcw,
+  Volume2,
+} from 'lucide-react';
 import {
   DPD_DICTIONARY,
   GRAMMAR_TOPICS,
@@ -11,22 +18,29 @@ import { speakPaliText } from '../utils/paliAudio';
 
 interface GrammarViewProps {
   attempts: GrammarAttemptRecord[];
+  selectedTopicId: string;
+  onSelectTopicId: (id: string) => void;
   onAttemptsUpdated: () => Promise<void>;
+  onMarkGrammarDone?: () => Promise<void>;
   onOpenInflection: (entry: DpdWordEntry) => void;
 }
 
 export const GrammarView: React.FC<GrammarViewProps> = ({
   attempts,
+  selectedTopicId,
+  onSelectTopicId,
   onAttemptsUpdated,
+  onMarkGrammarDone,
   onOpenInflection,
 }) => {
-  const [selectedTopicId, setSelectedTopicId] = useState<string>(GRAMMAR_TOPICS[0].id);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, number>>({});
   const [submittedQuestions, setSubmittedQuestions] = useState<Record<string, boolean>>({});
   const [showMistakesOnly, setShowMistakesOnly] = useState(false);
 
   const activeTopic: GrammarTopic =
     GRAMMAR_TOPICS.find((t) => t.id === selectedTopicId) ?? GRAMMAR_TOPICS[0];
+
+  const totalExercisesCount = GRAMMAR_TOPICS.reduce((sum, t) => sum + t.exercises.length, 0);
 
   const wrongQuestionIds = new Set(
     attempts.filter((a) => !a.isCorrect).map((a) => a.questionId)
@@ -44,6 +58,9 @@ export const GrammarView: React.FC<GrammarViewProps> = ({
       selectedOption: optionIdx,
       timestamp: nowTs,
     });
+    if (onMarkGrammarDone) {
+      await onMarkGrammarDone();
+    }
     await onAttemptsUpdated();
   };
 
@@ -71,9 +88,11 @@ export const GrammarView: React.FC<GrammarViewProps> = ({
     <div className="max-w-3xl mx-auto px-4 pt-5 pb-28">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-[#141D1B]">巴利语核心语法与练习</h1>
+          <h1 className="text-2xl font-bold text-[#141D1B]">
+            巴利语阶梯语法（共 {GRAMMAR_TOPICS.length} 讲 · {totalExercisesCount} 道练习）
+          </h1>
           <p className="text-xs text-[#64706D] mt-0.5">
-            名词变格表 · 动词变位表 · 连声规则 · 每节配互动巩固练习
+            从 Lv.1 最简归依句型 → Lv.6 复合词与连声规则 · 循序渐进掌握经文语法
           </p>
         </div>
 
@@ -93,8 +112,8 @@ export const GrammarView: React.FC<GrammarViewProps> = ({
         )}
       </div>
 
-      {/* Topic Selector Tabs */}
-      <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+      {/* Topic Selector Tabs (6 Progressive Grammar Units from Easy to Hard) */}
+      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
         {GRAMMAR_TOPICS.map((topic) => {
           const isSelected = topic.id === activeTopic.id;
           return (
@@ -102,7 +121,7 @@ export const GrammarView: React.FC<GrammarViewProps> = ({
               key={topic.id}
               type="button"
               onClick={() => {
-                setSelectedTopicId(topic.id);
+                onSelectTopicId(topic.id);
                 setShowMistakesOnly(false);
               }}
               className={`rounded-2xl p-4 text-left border transition-all cursor-pointer ${
@@ -113,7 +132,7 @@ export const GrammarView: React.FC<GrammarViewProps> = ({
             >
               <div className="flex items-center justify-between">
                 <span className="font-mono-num text-xs font-bold text-[#1E625E]">
-                  CHAPTER {topic.number}
+                  第 {topic.number} 讲
                 </span>
                 <span className="text-[11px] text-[#7A8783]">
                   {topic.exercises.length} 道练习
@@ -128,14 +147,25 @@ export const GrammarView: React.FC<GrammarViewProps> = ({
 
       {/* Static Markdown-style Grammar Reference Content */}
       <div className="mt-5 rounded-3xl bg-white p-6 border border-[#E6EBE8] space-y-6">
-        <div className="border-b border-[#EEF2F0] pb-4">
-          <div className="text-xs font-semibold text-[#1E625E]">
-            第 {activeTopic.number} 讲 · 预计学习 {activeTopic.readingMinutes} 分钟
+        <div className="border-b border-[#EEF2F0] pb-4 flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <div className="text-xs font-semibold text-[#1E625E]">
+              第 {activeTopic.number} 讲 · 预计学习 {activeTopic.readingMinutes} 分钟
+            </div>
+            <h2 className="mt-1 text-xl sm:text-2xl font-bold text-[#141D1B]">
+              {activeTopic.titleZh}
+            </h2>
+            <p className="mt-1 text-sm text-[#52605C] leading-relaxed">{activeTopic.summary}</p>
           </div>
-          <h2 className="mt-1 text-xl sm:text-2xl font-bold text-[#141D1B]">
-            {activeTopic.titleZh}
-          </h2>
-          <p className="mt-1 text-sm text-[#52605C] leading-relaxed">{activeTopic.summary}</p>
+          {onMarkGrammarDone && (
+            <button
+              type="button"
+              onClick={() => void onMarkGrammarDone()}
+              className="rounded-xl bg-[#EBF3F1] px-3.5 py-2 text-xs font-semibold text-[#1E625E] hover:bg-[#DDF0ED] shrink-0 cursor-pointer"
+            >
+              标记今日语法已读
+            </button>
+          )}
         </div>
 
         {activeTopic.sections.map((sec) => (

@@ -145,7 +145,28 @@ export async function rateFlashcard(lemma: string, rating: CardRating): Promise<
 
 export async function ensureSeededDatabase(): Promise<void> {
   const seeded = await db.meta.get('initialized_v1');
-  if (seeded) return;
+  if (seeded) {
+    // Sync any newly added Phase 1 DPD lemmas into IndexedDB without touching existing progress
+    const existingLemmas = new Set(await db.cards.toCollection().primaryKeys());
+    const now = Date.now();
+    const missingCards: FlashcardRecord[] = Object.keys(DPD_DICTIONARY)
+      .filter((lemma) => !existingLemmas.has(lemma))
+      .map((lemma, idx) => ({
+        lemma,
+        status: 'new',
+        intervalDays: 0,
+        easeFactor: 2.5,
+        repetitions: 0,
+        lapses: 0,
+        dueTimestamp: now,
+        inDeck: false,
+        addedAt: now - idx * 1000,
+      }));
+    if (missingCards.length > 0) {
+      await db.cards.bulkPut(missingCards);
+    }
+    return;
+  }
   await restoreSampleProgress();
 }
 
@@ -154,18 +175,22 @@ export async function restoreSampleProgress(): Promise<void> {
   const allLemmas = Object.keys(DPD_DICTIONARY);
 
   const sortedLemmas = [...allLemmas].sort(
-    (a, b) => DPD_DICTIONARY[a].frequencyRank - DPD_DICTIONARY[b].frequencyRank
+    (a, b) =>
+      DPD_DICTIONARY[a].difficultyLevel - DPD_DICTIONARY[b].difficultyLevel ||
+      DPD_DICTIONARY[a].frequencyRank - DPD_DICTIONARY[b].frequencyRank
   );
 
   const initialDueLemmas = [
+    'buddha',
     'dhamma',
-    'manas',
+    'saṅgha',
+    'saraṇa',
+    'gacchati',
+    'ahaṃ',
+    'namo',
+    'bhagavant',
     'manopubbaṅgama',
-    'manoseṭṭha',
-    'manomaya',
-    'paduṭṭha',
-    'bhāsati',
-    'karoti',
+    'manas',
   ];
 
   const cardsToInsert: FlashcardRecord[] = sortedLemmas.map((lemma, idx) => {
@@ -200,37 +225,47 @@ export async function restoreSampleProgress(): Promise<void> {
     { key: 'initialized_v1', value: true },
     { key: 'streakDays', value: 12 },
     { key: 'baseMasteredOffset', value: 37 },
-    { key: 'selectedLessonId', value: 'dhp-1' },
+    { key: 'selectedCourseId', value: 'course-1' },
+    { key: 'selectedLessonId', value: 'kp-1' },
     { key: 'dailyCardLimit', value: 8 },
     { key: 'task_cards_done', value: true },
+    { key: 'task_grammar_done', value: false },
     { key: 'task_audio_done', value: false },
     { key: 'task_reading_done', value: false },
   ]);
 }
 
-// Reset all progress to 0 so the user can study from scratch (从 0 开始学)
+// Reset all progress to 0 so the user can study from scratch (从 0 开始学 · 第 1 阶零基础入门课)
 export async function resetToZeroProgress(dailyLimit = 5): Promise<void> {
   const now = Date.now();
   const allLemmas = Object.keys(DPD_DICTIONARY);
 
   const sortedLemmas = [...allLemmas].sort(
-    (a, b) => DPD_DICTIONARY[a].frequencyRank - DPD_DICTIONARY[b].frequencyRank
+    (a, b) =>
+      DPD_DICTIONARY[a].difficultyLevel - DPD_DICTIONARY[b].difficultyLevel ||
+      DPD_DICTIONARY[a].frequencyRank - DPD_DICTIONARY[b].frequencyRank
   );
 
-  // Put only the first `dailyLimit` Lesson 1 words into today's initial learning queue
-  const lesson1Lemmas = [
-    'manopubbaṅgama',
+  // Put the simplest, most common Level 1 words into today's initial learning queue
+  const course1Lemmas = [
+    'buddha',
     'dhamma',
-    'manoseṭṭha',
-    'manomaya',
-    'manas',
+    'saṅgha',
+    'saraṇa',
+    'gacchati',
+    'ahaṃ',
+    'namo',
+    'bhagavant',
+    'ca',
+    'na',
+    'vā',
     'ce',
-    'paduṭṭha',
-    'bhāsati',
+    'sādhu',
+    'bhikkhu',
   ].slice(0, dailyLimit);
 
   const freshCards: FlashcardRecord[] = sortedLemmas.map((lemma, idx) => {
-    const isFirstBatch = lesson1Lemmas.includes(lemma);
+    const isFirstBatch = course1Lemmas.includes(lemma);
     return {
       lemma,
       status: isFirstBatch ? 'learning' : 'new',
@@ -253,9 +288,11 @@ export async function resetToZeroProgress(dailyLimit = 5): Promise<void> {
     { key: 'initialized_v1', value: true },
     { key: 'streakDays', value: 0 },
     { key: 'baseMasteredOffset', value: 0 },
-    { key: 'selectedLessonId', value: 'dhp-1' },
+    { key: 'selectedCourseId', value: 'course-1' },
+    { key: 'selectedLessonId', value: 'kp-1' },
     { key: 'dailyCardLimit', value: dailyLimit },
     { key: 'task_cards_done', value: false },
+    { key: 'task_grammar_done', value: false },
     { key: 'task_audio_done', value: false },
     { key: 'task_reading_done', value: false },
   ]);

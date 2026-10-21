@@ -10,7 +10,11 @@ import {
   Volume2,
   X,
 } from 'lucide-react';
-import { DPD_DICTIONARY, SUTTAS, type DpdWordEntry } from '../data/paliData';
+import {
+  CURRICULUM_COURSES,
+  DPD_DICTIONARY,
+  type DpdWordEntry,
+} from '../data/paliData';
 import {
   getNextIntervalPreview,
   rateFlashcard,
@@ -21,95 +25,97 @@ import { speakPaliText } from '../utils/paliAudio';
 
 interface FlashcardsViewProps {
   cards: FlashcardRecord[];
-  selectedLessonId?: string;
+  selectedCourseId?: string;
   dailyCardLimit: number;
   onChangeDailyCardLimit: (limit: number) => Promise<void>;
   onCardsUpdated: () => Promise<void>;
+  onMarkCardsDone?: () => Promise<void>;
   onCloseReviewToToday?: () => void;
   onOpenInflection: (entry: DpdWordEntry, highlightForm?: string) => void;
   initialMode?: 'review' | 'browse';
 }
 
+const LEVEL_LABELS: Record<number, string> = {
+  1: 'Lv.1 零基础入门',
+  2: 'Lv.2 基础常用',
+  3: 'Lv.3 核心动词',
+  4: 'Lv.4 格位进阶',
+  5: 'Lv.5 分词过去时',
+  6: 'Lv.6 复合词高阶',
+};
+
 export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
   cards,
-  selectedLessonId = 'dhp-1',
+  selectedCourseId = 'course-1',
   dailyCardLimit,
   onChangeDailyCardLimit,
   onCardsUpdated,
+  onMarkCardsDone,
   onCloseReviewToToday,
   onOpenInflection,
   initialMode = 'review',
 }) => {
   const [mode, setMode] = useState<'review' | 'browse'>(initialMode);
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'due' | 'mastered' | 'highfreq'>('all');
+  const [statusFilter, setStatusFilter] = useState<
+    'all' | 'lv1_2' | 'lv3_4' | 'lv5_6' | 'due' | 'mastered'
+  >('all');
 
   // Front/Back flip state: false = Front (only Pāli word), true = Back (full details)
   const [isFlipped, setIsFlipped] = useState<boolean>(false);
 
-  // Build ordered review session queue respecting dailyCardLimit (5, 8, 12, or 16)
+  const currentCourse = useMemo(
+    () => CURRICULUM_COURSES.find((c) => c.id === selectedCourseId) ?? CURRICULUM_COURSES[0],
+    [selectedCourseId]
+  );
+
+  // Build ordered review session queue from easy-to-hard for the active course respecting dailyCardLimit
   const reviewQueue = useMemo(() => {
-    const lessonSutta = SUTTAS.find((s) => s.id === selectedLessonId) ?? SUTTAS[0];
-    const lessonLemmas: string[] = [];
-    lessonSutta.sentences.forEach((s) =>
-      s.tokens.forEach((t) => {
-        if (!lessonLemmas.includes(t.lemma) && DPD_DICTIONARY[t.lemma]) {
-          lessonLemmas.push(t.lemma);
-        }
-      })
-    );
-
-    const preferredOrder =
-      selectedLessonId === 'dhp-1'
-        ? [
-            'dhamma',
-            'manas',
-            'manopubbaṅgama',
-            'manoseṭṭha',
-            'manomaya',
-            'paduṭṭha',
-            'bhāsati',
-            'karoti',
-            'vā',
-            'ce',
-            'dukkha',
-            'anveti',
-            'tato',
-            'naṃ',
-            'cakka',
-            'pada',
-          ]
-        : lessonLemmas;
-
     const ordered: FlashcardRecord[] = [];
 
-    preferredOrder.forEach((lemma) => {
+    // 1. First prioritize the active course's core lemmas (ordered from simplest/most common)
+    currentCourse.coreLemmas.forEach((lemma) => {
       const found = cards.find((c) => c.lemma === lemma);
       if (found && ordered.length < dailyCardLimit) {
         ordered.push(found);
       }
     });
 
-    const inDeckCards = cards.filter((c) => c.inDeck);
+    // 2. Then any due / inDeck cards sorted by difficultyLevel (easy first)
+    const inDeckCards = [...cards]
+      .filter((c) => c.inDeck)
+      .sort((a, b) => {
+        const ea = DPD_DICTIONARY[a.lemma];
+        const eb = DPD_DICTIONARY[b.lemma];
+        return (ea?.difficultyLevel ?? 3) - (eb?.difficultyLevel ?? 3);
+      });
+
     inDeckCards.forEach((c) => {
       if (!ordered.some((o) => o.lemma === c.lemma) && ordered.length < dailyCardLimit) {
         ordered.push(c);
       }
     });
 
-    cards.forEach((c) => {
+    // 3. Finally fill up to dailyCardLimit sorted by difficultyLevel (1 -> 6)
+    const allSortedEasyFirst = [...cards].sort((a, b) => {
+      const ea = DPD_DICTIONARY[a.lemma];
+      const eb = DPD_DICTIONARY[b.lemma];
+      return (
+        (ea?.difficultyLevel ?? 3) - (eb?.difficultyLevel ?? 3) ||
+        (ea?.frequencyRank ?? 99) - (eb?.frequencyRank ?? 99)
+      );
+    });
+
+    allSortedEasyFirst.forEach((c) => {
       if (!ordered.some((o) => o.lemma === c.lemma) && ordered.length < dailyCardLimit) {
         ordered.push(c);
       }
     });
 
     return ordered.slice(0, dailyCardLimit);
-  }, [cards, selectedLessonId, dailyCardLimit]);
+  }, [cards, currentCourse, dailyCardLimit]);
 
-  const [currentIndex, setCurrentIndex] = useState<number>(() => {
-    const manoIdx = reviewQueue.findIndex((c) => c.lemma === 'manopubbaṅgama');
-    return manoIdx >= 0 ? manoIdx : 0;
-  });
+  const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [sessionCompletedCount, setSessionCompletedCount] = useState(0);
   const [showSessionSummary, setShowSessionSummary] = useState(false);
 
@@ -117,7 +123,7 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
   const activeCard = reviewQueue[safeIndex] ?? reviewQueue[0];
   const activeEntry = activeCard
     ? DPD_DICTIONARY[activeCard.lemma]
-    : DPD_DICTIONARY.manopubbaṅgama;
+    : DPD_DICTIONARY.buddha;
   const intervalPreview = activeCard
     ? getNextIntervalPreview(activeCard)
     : { again: '10 分钟', hard: '1 天', good: '3 天', easy: '7 天' };
@@ -132,6 +138,9 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
     if (safeIndex + 1 < reviewQueue.length) {
       setCurrentIndex(safeIndex + 1);
     } else {
+      if (onMarkCardsDone) {
+        await onMarkCardsDone();
+      }
       setShowSessionSummary(true);
     }
   };
@@ -161,12 +170,19 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
   };
 
   const browsableEntries = useMemo(() => {
-    const all = Object.values(DPD_DICTIONARY).sort((a, b) => a.frequencyRank - b.frequencyRank);
+    // Sort by difficultyLevel (1 = easiest/most common -> 6 = compound/advanced), then by suttaOccurrences desc
+    const all = Object.values(DPD_DICTIONARY).sort(
+      (a, b) =>
+        a.difficultyLevel - b.difficultyLevel || b.suttaOccurrences - a.suttaOccurrences
+    );
     return all.filter((entry) => {
       const card = cards.find((c) => c.lemma === entry.lemma);
+      if (statusFilter === 'lv1_2' && entry.difficultyLevel > 2) return false;
+      if (statusFilter === 'lv3_4' && (entry.difficultyLevel < 3 || entry.difficultyLevel > 4))
+        return false;
+      if (statusFilter === 'lv5_6' && entry.difficultyLevel < 5) return false;
       if (statusFilter === 'due' && !(card?.inDeck && card.status !== 'mastered')) return false;
       if (statusFilter === 'mastered' && card?.status !== 'mastered') return false;
-      if (statusFilter === 'highfreq' && entry.suttaOccurrences < 500) return false;
 
       if (!searchQuery.trim()) return true;
       const q = searchQuery.toLowerCase();
@@ -196,14 +212,18 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
     );
   };
 
+  const totalDictCount = Object.keys(DPD_DICTIONARY).length;
+
   if (mode === 'browse') {
     return (
       <div className="max-w-3xl mx-auto px-4 pt-5 pb-28">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-bold text-[#141D1B]">DPD 巴利语高频词表</h1>
+            <h1 className="text-2xl font-bold text-[#141D1B]">
+              DPD 巴利语阶梯词库（共 {totalDictCount} 词）
+            </h1>
             <p className="text-xs text-[#64706D] mt-0.5">
-              按三藏经文出现频率排序 · 支持 FSRS / SM-2 间隔重复记忆
+              按 Lv.1 零基础简单高频词 → Lv.6 复合词由易到难排列 · 含完整八格与动词变位表
             </p>
           </div>
           <button
@@ -216,14 +236,14 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
             className="inline-flex items-center gap-2 rounded-2xl bg-[#1E625E] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#174E4A] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
           >
             <Layers className="w-4 h-4" />
-            <span>进入词卡复习 ({reviewQueue.length} 词)</span>
+            <span>返回词卡复习 ({reviewQueue.length} 词)</span>
           </button>
         </div>
 
         {/* Daily Limit Quick Selector */}
         <div className="mt-4 rounded-2xl bg-white p-3.5 border border-[#E6EBE8] flex flex-wrap items-center justify-between gap-2">
           <span className="text-xs font-medium text-[#52605C]">
-            每日词卡复习数量（建议新手 5–8 词/天）：
+            当前学习：{currentCourse.levelBadge}（{currentCourse.titleZh}）· 每日词量：
           </span>
           <div className="flex items-center gap-1.5">
             {[5, 8, 12, 16].map((limit) => (
@@ -244,8 +264,8 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
         </div>
 
         {/* Search & Filter Controls */}
-        <div className="mt-3 flex flex-col sm:flex-row gap-2.5">
-          <div className="relative flex-1">
+        <div className="mt-3 space-y-2.5">
+          <div className="relative">
             <Search className="w-4 h-4 text-[#7A8783] absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
@@ -255,23 +275,25 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
               className="w-full rounded-2xl bg-white border border-[#E2E8E5] pl-10 pr-4 py-2.5 text-sm text-[#141D1B] placeholder:text-[#8C9894] focus:outline-none focus:border-[#1E625E]"
             />
           </div>
-          <div className="flex items-center gap-1 bg-[#E7ECE9] p-1 rounded-2xl">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
             {(
               [
-                { id: 'all', label: '全部词频' },
+                { id: 'all', label: `全部词库 (${totalDictCount})` },
+                { id: 'lv1_2', label: 'Lv.1–2 简单常用 (28)' },
+                { id: 'lv3_4', label: 'Lv.3–4 进阶核心 (26)' },
+                { id: 'lv5_6', label: 'Lv.5–6 分词与复合词 (26)' },
                 { id: 'due', label: '学习中' },
                 { id: 'mastered', label: '已掌握' },
-                { id: 'highfreq', label: '核心高频' },
               ] as const
             ).map((tab) => (
               <button
                 key={tab.id}
                 type="button"
                 onClick={() => setStatusFilter(tab.id)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                   statusFilter === tab.id
-                    ? 'bg-white text-[#141D1B] shadow-2xs'
-                    : 'text-[#52605C] hover:text-[#141D1B]'
+                    ? 'bg-[#1E625E] text-white'
+                    : 'bg-white border border-[#E2EAE7] text-[#52605C] hover:text-[#141D1B]'
                 }`}
               >
                 {tab.label}
@@ -291,9 +313,9 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
                 className="rounded-2xl bg-white p-4 border border-[#E6EBE8] flex flex-col sm:flex-row sm:items-center justify-between gap-3"
               >
                 <div className="space-y-1">
-                  <div className="flex items-center gap-2.5 flex-wrap">
-                    <span className="font-mono-num text-xs text-[#7A8783]">
-                      #{entry.frequencyRank}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="rounded-md bg-[#EBF3F1] text-[#1E625E] px-2 py-0.5 text-[11px] font-bold">
+                      {LEVEL_LABELS[entry.difficultyLevel]}
                     </span>
                     <button
                       type="button"
@@ -316,9 +338,8 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
                       <Volume2 className="w-3.5 h-3.5" />
                     </button>
                     <span className="text-xs text-[#64706D]">
-                      {entry.pos} · 经文出现 {entry.suttaOccurrences.toLocaleString()} 次
+                      {entry.pos} · 圣典出现 {entry.suttaOccurrences.toLocaleString()} 次
                       {card?.status === 'mastered' ? ' · 已掌握' : ''}
-                      {card && card.intervalDays > 0 ? ` · 间隔 ${card.intervalDays} 天` : ''}
                     </span>
                   </div>
                   <p className="text-sm font-medium text-[#141D1B]">{entry.meaningZh}</p>
@@ -382,16 +403,23 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
           >
             <X className="w-6 h-6 stroke-[2]" />
           </button>
-          <h1 className="text-xl font-bold text-[#141D1B] tracking-tight">词卡复习</h1>
+          <div>
+            <h1 className="text-xl font-bold text-[#141D1B] tracking-tight leading-tight">
+              词卡复习
+            </h1>
+            <p className="text-[11px] text-[#64706D]">
+              {currentCourse.levelBadge} · 先学简单高频词
+            </p>
+          </div>
         </div>
 
         <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={() => setMode('browse')}
-            className="text-xs font-medium text-[#1E625E] hover:underline whitespace-nowrap cursor-pointer"
+            className="text-xs font-semibold text-[#1E625E] hover:underline whitespace-nowrap cursor-pointer"
           >
-            词表与词量 ({dailyCardLimit}词/天)
+            全部词库 ({totalDictCount}词)
           </button>
           <span className="font-mono-num text-base font-semibold text-[#52605C]">
             {safeIndex + 1} / {reviewQueue.length}
@@ -434,7 +462,7 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
               onClick={() => setMode('browse')}
               className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#1E625E] px-5 py-3 text-sm font-semibold text-white hover:bg-[#174E4A] transition-colors cursor-pointer"
             >
-              <span>管理词库与每日词量</span>
+              <span>查看 80 词阶梯词库</span>
             </button>
           </div>
         </div>
@@ -456,7 +484,7 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
               className="mt-4 rounded-3xl bg-white px-6 py-16 sm:px-8 sm:py-20 shadow-2xs border border-[#E8ECEA] min-h-[420px] flex flex-col items-center justify-between cursor-pointer hover:border-[#C2D6D2] transition-all select-none"
             >
               <span className="text-xs font-medium text-[#8C9894] tracking-wide">
-                词卡正面 · 回忆词义与词根
+                {LEVEL_LABELS[activeEntry.difficultyLevel]} · 词卡正面（点击翻转）
               </span>
 
               <div className="my-auto text-center space-y-8">
@@ -491,6 +519,9 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
             >
               {/* Word & POS */}
               <div className="text-center">
+                <span className="inline-block rounded-md bg-[#EBF3F1] text-[#1E625E] px-2.5 py-0.5 text-xs font-bold mb-2">
+                  {LEVEL_LABELS[activeEntry.difficultyLevel]}
+                </span>
                 <h2 className="font-pali text-[36px] sm:text-[42px] leading-tight font-semibold text-[#141D1B] tracking-tight break-words">
                   {activeEntry.lemma}
                 </h2>

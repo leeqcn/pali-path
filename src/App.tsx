@@ -14,7 +14,11 @@ import { InflectionModal } from './components/InflectionModal';
 import { OfflineIndicator } from './components/PWAInstallButton';
 import { SuttaReaderView } from './components/SuttaReaderView';
 import { TodayView } from './components/TodayView';
-import type { DpdWordEntry } from './data/paliData';
+import {
+  CURRICULUM_COURSES,
+  GRAMMAR_TOPICS,
+  type DpdWordEntry,
+} from './data/paliData';
 import {
   db,
   ensureSeededDatabase,
@@ -33,15 +37,21 @@ export function App() {
   const [grammarAttempts, setGrammarAttempts] = useState<GrammarAttemptRecord[]>([]);
   const [streakDays, setStreakDays] = useState<number>(12);
   const [baseMasteredOffset, setBaseMasteredOffset] = useState<number>(37);
-  const [selectedLessonId, setSelectedLessonId] = useState<string>('dhp-1');
+  // Progressive Course ID ('course-1' ... 'course-6') — easy to hard
+  const [selectedCourseId, setSelectedCourseId] = useState<string>('course-1');
+  const [selectedGrammarTopicId, setSelectedGrammarTopicId] = useState<string>(
+    GRAMMAR_TOPICS[0].id
+  );
   const [dailyCardLimit, setDailyCardLimit] = useState<number>(8);
   const [taskStatus, setTaskStatus] = useState({
     cardsDone: true,
+    grammarDone: false,
     audioDone: false,
     readingDone: false,
   });
 
-  const [selectedSuttaId, setSelectedSuttaId] = useState<string>('dhp-1');
+  // Independent Sutta Reader ID (经文阅读独立于课程，默认按原典顺序从 Dhp 1 开始自由阅读)
+  const [independentSuttaId, setIndependentSuttaId] = useState<string>('dhp-1');
   const [autoPlayAudioOnReader, setAutoPlayAudioOnReader] = useState<boolean>(false);
   const [activeAudioLabel, setActiveAudioLabel] = useState<string | null>(null);
   const [bottomNavCollapsed, setBottomNavCollapsed] = useState<boolean>(false);
@@ -78,13 +88,17 @@ export function App() {
     if (typeof metaMap.get('dailyCardLimit') === 'number') {
       setDailyCardLimit(metaMap.get('dailyCardLimit') as number);
     }
-    if (typeof metaMap.get('selectedLessonId') === 'string') {
-      const savedLesson = metaMap.get('selectedLessonId') as string;
-      setSelectedLessonId(savedLesson);
-      setSelectedSuttaId(savedLesson);
+    if (typeof metaMap.get('selectedCourseId') === 'string') {
+      const savedCourseId = metaMap.get('selectedCourseId') as string;
+      setSelectedCourseId(savedCourseId);
+      const foundCourse = CURRICULUM_COURSES.find((c) => c.id === savedCourseId);
+      if (foundCourse) {
+        setSelectedGrammarTopicId(foundCourse.grammarTopicId);
+      }
     }
     setTaskStatus({
       cardsDone: Boolean(metaMap.get('task_cards_done') ?? true),
+      grammarDone: Boolean(metaMap.get('task_grammar_done') ?? false),
       audioDone: Boolean(metaMap.get('task_audio_done') ?? false),
       readingDone: Boolean(metaMap.get('task_reading_done') ?? false),
     });
@@ -113,13 +127,17 @@ export function App() {
       if (typeof metaMap.get('dailyCardLimit') === 'number') {
         setDailyCardLimit(metaMap.get('dailyCardLimit') as number);
       }
-      if (typeof metaMap.get('selectedLessonId') === 'string') {
-        const savedLesson = metaMap.get('selectedLessonId') as string;
-        setSelectedLessonId(savedLesson);
-        setSelectedSuttaId(savedLesson);
+      if (typeof metaMap.get('selectedCourseId') === 'string') {
+        const savedCourseId = metaMap.get('selectedCourseId') as string;
+        setSelectedCourseId(savedCourseId);
+        const foundCourse = CURRICULUM_COURSES.find((c) => c.id === savedCourseId);
+        if (foundCourse) {
+          setSelectedGrammarTopicId(foundCourse.grammarTopicId);
+        }
       }
       setTaskStatus({
         cardsDone: Boolean(metaMap.get('task_cards_done') ?? true),
+        grammarDone: Boolean(metaMap.get('task_grammar_done') ?? false),
         audioDone: Boolean(metaMap.get('task_audio_done') ?? false),
         readingDone: Boolean(metaMap.get('task_reading_done') ?? false),
       });
@@ -129,10 +147,12 @@ export function App() {
     };
   }, []);
 
-  const handleSelectLesson = async (suttaId: string) => {
-    await db.meta.put({ key: 'selectedLessonId', value: suttaId });
-    setSelectedLessonId(suttaId);
-    setSelectedSuttaId(suttaId);
+  // Selecting a progressive course updates the course & grammar topic, without locking the independent Sutta Reader
+  const handleSelectCourse = async (courseId: string) => {
+    const course = CURRICULUM_COURSES.find((c) => c.id === courseId) ?? CURRICULUM_COURSES[0];
+    await db.meta.put({ key: 'selectedCourseId', value: course.id });
+    setSelectedCourseId(course.id);
+    setSelectedGrammarTopicId(course.grammarTopicId);
     await loadAllFromIndexedDB();
   };
 
@@ -145,6 +165,8 @@ export function App() {
   const handleResetToZero = async () => {
     stopPaliAudio();
     await resetToZeroProgress(dailyCardLimit);
+    setSelectedCourseId('course-1');
+    setSelectedGrammarTopicId('grammar-lv1-basics');
     await loadAllFromIndexedDB();
   };
 
@@ -155,20 +177,22 @@ export function App() {
   };
 
   const handleToggleTaskDone = async (
-    key: 'task_cards_done' | 'task_audio_done' | 'task_reading_done'
+    key: 'task_cards_done' | 'task_grammar_done' | 'task_audio_done' | 'task_reading_done'
   ) => {
     const currentVal =
       key === 'task_cards_done'
         ? taskStatus.cardsDone
-        : key === 'task_audio_done'
-          ? taskStatus.audioDone
-          : taskStatus.readingDone;
+        : key === 'task_grammar_done'
+          ? taskStatus.grammarDone
+          : key === 'task_audio_done'
+            ? taskStatus.audioDone
+            : taskStatus.readingDone;
     await db.meta.put({ key, value: !currentVal });
     await loadAllFromIndexedDB();
   };
 
   const handleMarkTaskCompleted = async (
-    key: 'task_audio_done' | 'task_reading_done'
+    key: 'task_cards_done' | 'task_grammar_done' | 'task_audio_done' | 'task_reading_done'
   ) => {
     await db.meta.put({ key, value: true });
     await loadAllFromIndexedDB();
@@ -224,36 +248,40 @@ export function App() {
             streakDays={streakDays}
             masteredCount={masteredCount}
             suttaCoveragePct={suttaCoveragePct}
-            selectedLessonId={selectedLessonId}
+            selectedCourseId={selectedCourseId}
             dailyCardLimit={dailyCardLimit}
             onChangeDailyCardLimit={handleChangeDailyCardLimit}
-            onSelectLesson={handleSelectLesson}
+            onSelectCourse={handleSelectCourse}
             onResetToZero={handleResetToZero}
             onRestoreSample={handleRestoreSample}
             taskStatus={taskStatus}
             onToggleTaskDone={handleToggleTaskDone}
             onStartFlashcardReview={() => handleSwitchTab('cards')}
+            onStartGrammarTask={(grammarTopicId) => {
+              setSelectedGrammarTopicId(grammarTopicId);
+              handleSwitchTab('grammar');
+            }}
             onStartAudioTask={(suttaId) => {
-              setSelectedSuttaId(suttaId);
+              setIndependentSuttaId(suttaId);
               setAutoPlayAudioOnReader(true);
               setActiveTab('reader');
             }}
             onStartReadingTask={(suttaId) => {
-              setSelectedSuttaId(suttaId);
+              setIndependentSuttaId(suttaId);
               setAutoPlayAudioOnReader(false);
               setActiveTab('reader');
             }}
-            onStartGrammarTask={() => handleSwitchTab('grammar')}
           />
         )}
 
         {activeTab === 'cards' && (
           <FlashcardsView
             cards={cards}
-            selectedLessonId={selectedLessonId}
+            selectedCourseId={selectedCourseId}
             dailyCardLimit={dailyCardLimit}
             onChangeDailyCardLimit={handleChangeDailyCardLimit}
             onCardsUpdated={loadAllFromIndexedDB}
+            onMarkCardsDone={() => handleMarkTaskCompleted('task_cards_done')}
             onCloseReviewToToday={() => handleSwitchTab('today')}
             onOpenInflection={handleOpenInflection}
           />
@@ -262,7 +290,10 @@ export function App() {
         {activeTab === 'grammar' && (
           <GrammarView
             attempts={grammarAttempts}
+            selectedTopicId={selectedGrammarTopicId}
+            onSelectTopicId={setSelectedGrammarTopicId}
             onAttemptsUpdated={loadAllFromIndexedDB}
+            onMarkGrammarDone={() => handleMarkTaskCompleted('task_grammar_done')}
             onOpenInflection={handleOpenInflection}
           />
         )}
@@ -270,8 +301,8 @@ export function App() {
         {activeTab === 'reader' && (
           <SuttaReaderView
             cards={cards}
-            selectedSuttaId={selectedSuttaId}
-            onSelectSuttaId={setSelectedSuttaId}
+            selectedSuttaId={independentSuttaId}
+            onSelectSuttaId={setIndependentSuttaId}
             onCardsUpdated={loadAllFromIndexedDB}
             onOpenInflection={handleOpenInflection}
             onMarkTaskCompleted={handleMarkTaskCompleted}
