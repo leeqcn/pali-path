@@ -143,6 +143,30 @@ export async function rateFlashcard(lemma: string, rating: CardRating): Promise<
   return updated;
 }
 
+export async function saveSuttaSentenceProgress(
+  suttaId: string,
+  sentenceId: string,
+  sentenceIdx: number,
+  mode: 'read' | 'listen'
+): Promise<string[]> {
+  const existing = await db.suttaProgress.get(suttaId);
+  const nextRead = new Set(existing?.readSentenceIds ?? []);
+  const nextListened = new Set(existing?.listenedSentenceIds ?? []);
+  nextRead.add(sentenceId);
+  if (mode === 'listen') {
+    nextListened.add(sentenceId);
+  }
+  const nextReadArr = Array.from(nextRead);
+  await db.suttaProgress.put({
+    suttaId,
+    readSentenceIds: nextReadArr,
+    listenedSentenceIds: Array.from(nextListened),
+    lastSentenceIdx: sentenceIdx,
+    updatedAt: Date.now(),
+  });
+  return nextReadArr;
+}
+
 export interface PaliBackupPayload {
   version: 1;
   app: 'PaliPathPWA';

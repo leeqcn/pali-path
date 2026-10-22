@@ -541,21 +541,21 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
       </div>
 
       {/* Progress Bar under Top Bar */}
-      <div className="mt-1.5 h-1 w-full rounded-full bg-[#DCE4E1] overflow-hidden">
+      <div className="mt-1.5 h-1 w-full rounded-full bg-[#DCE5E1] overflow-hidden">
         <div
-          className="h-full bg-[#1E625E] transition-all duration-300 rounded-full"
+          className="h-full bg-[#25635E] transition-all duration-300 rounded-full"
           style={{ width: `${((safeIndex + 1) / Math.max(1, reviewQueue.length)) * 100}%` }}
         />
       </div>
 
       {showSessionSummary ? (
-        <div className="mt-6 rounded-3xl bg-white p-8 border border-[#E6EBE8] text-center space-y-4">
-          <div className="w-14 h-14 rounded-full bg-[#EBF3F1] text-[#1E625E] flex items-center justify-center mx-auto">
+        <div className="mt-6 rounded-3xl bg-[#FAFBF9] p-8 border border-[#E3EAE6] shadow-[0_4px_20px_-4px_rgba(30,44,41,0.035)] text-center space-y-4">
+          <div className="w-14 h-14 rounded-full bg-[#EAF2EF] text-[#25635E] flex items-center justify-center mx-auto">
             <Sparkles className="w-7 h-7" />
           </div>
-          <h2 className="text-2xl font-bold text-[#141D1B]">今日词卡复习已完成</h2>
-          <p className="text-sm text-[#52605C]">
-            本次共完成 <span className="font-semibold text-[#1E625E]">{sessionCompletedCount}</span> 个巴利语词汇，间隔重复进度已保存至浏览器 IndexedDB。
+          <h2 className="text-2xl font-bold text-[#1E2A27]">今日词卡复习已完成</h2>
+          <p className="text-sm text-[#566561]">
+            本次共完成 <span className="font-semibold text-[#25635E]">{sessionCompletedCount}</span> 个巴利语词汇，间隔重复进度已保存至浏览器 IndexedDB。
           </p>
           <div className="pt-2 flex flex-col sm:flex-row gap-3 justify-center">
             <button
@@ -565,7 +565,7 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
                 setIsFlipped(false);
                 setCurrentIndex(0);
               }}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-[#CEDAD7] px-5 py-3 text-sm font-semibold text-[#1E625E] hover:bg-[#EBF3F1] transition-colors cursor-pointer"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-[#CEDAD7] bg-[#FAFBF9] px-5 py-3 text-sm font-semibold text-[#25635E] hover:bg-[#EAF2EF] transition-colors cursor-pointer"
             >
               <RotateCcw className="w-4 h-4" />
               <span>再复习一轮</span>
@@ -573,7 +573,7 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
             <button
               type="button"
               onClick={() => setMode('browse')}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#1E625E] px-5 py-3 text-sm font-semibold text-white hover:bg-[#174E4A] transition-colors cursor-pointer"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#25635E] px-5 py-3 text-sm font-semibold text-white hover:bg-[#1E524E] transition-colors cursor-pointer"
             >
               <span>查看 80 词阶梯词库</span>
             </button>
@@ -594,14 +594,14 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
                   handleFlipToBack();
                 }
               }}
-              className="mt-4 rounded-3xl bg-white px-6 py-16 sm:px-8 sm:py-20 shadow-2xs border border-[#E8ECEA] min-h-[420px] flex flex-col items-center justify-between cursor-pointer hover:border-[#C2D6D2] transition-all select-none"
+              className="mt-4 rounded-3xl bg-[#FAFBF9] px-6 py-16 sm:px-8 sm:py-20 shadow-[0_4px_20px_-4px_rgba(30,44,41,0.035)] border border-[#E3EAE6] min-h-[420px] flex flex-col items-center justify-between cursor-pointer hover:border-[#C2D6D2] transition-all select-none"
             >
-              <span className="text-xs font-medium text-[#8C9894] tracking-wide">
+              <span className="text-xs font-medium text-[#7F8E8A] tracking-wide">
                 {LEVEL_LABELS[activeEntry.difficultyLevel]} · 词卡正面（点击翻转）
               </span>
 
               <div className="my-auto text-center space-y-8">
-                <h2 className="font-pali text-[38px] sm:text-[44px] leading-tight font-semibold text-[#141D1B] tracking-tight break-words">
+                <h2 className="font-pali text-[38px] sm:text-[44px] leading-tight font-semibold text-[#1E2A27] tracking-tight break-words">
                   {activeEntry.lemma}
                 </h2>
 
@@ -613,14 +613,14 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
                       speakPaliText(activeEntry.lemma);
                     }}
                     aria-label="播放单词发音"
-                    className="w-16 h-16 rounded-full bg-[#EBF3F1] text-[#1E625E] flex items-center justify-center hover:bg-[#DDF0ED] active:scale-95 transition-all cursor-pointer"
+                    className="w-16 h-16 rounded-full bg-[#EAF2EF] text-[#25635E] flex items-center justify-center hover:bg-[#DCECE7] active:scale-95 transition-all cursor-pointer"
                   >
                     <Volume2 className="w-7 h-7 stroke-[2]" />
                   </button>
                 </div>
               </div>
 
-              <div className="inline-flex items-center gap-1.5 rounded-full bg-[#F5F6F4] px-4 py-2 text-xs font-medium text-[#52605C]">
+              <div className="inline-flex items-center gap-1.5 rounded-full bg-[#F1F4F1] px-4 py-2 text-xs font-medium text-[#566561]">
                 <span>点击卡片任意位置翻转查看背面释义</span>
               </div>
             </div>
@@ -628,17 +628,17 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
             /* BACK SIDE (反面：完整释义、词根拆解、例句，点击空白处可翻回正面) */
             <div
               onClick={() => setIsFlipped(false)}
-              className="mt-4 rounded-3xl bg-white px-6 py-8 sm:px-8 sm:py-9 shadow-2xs border border-[#E8ECEA] min-h-[420px] cursor-pointer transition-all"
+              className="mt-4 rounded-3xl bg-[#FAFBF9] px-6 py-8 sm:px-8 sm:py-9 shadow-[0_4px_20px_-4px_rgba(30,44,41,0.035)] border border-[#E3EAE6] min-h-[420px] cursor-pointer transition-all"
             >
               {/* Word & POS */}
               <div className="text-center">
-                <span className="inline-block rounded-md bg-[#EBF3F1] text-[#1E625E] px-2.5 py-0.5 text-xs font-bold mb-2">
+                <span className="inline-block rounded-md bg-[#EAF2EF] text-[#25635E] px-2.5 py-0.5 text-xs font-bold mb-2">
                   {LEVEL_LABELS[activeEntry.difficultyLevel]}
                 </span>
-                <h2 className="font-pali text-[36px] sm:text-[42px] leading-tight font-semibold text-[#141D1B] tracking-tight break-words">
+                <h2 className="font-pali text-[36px] sm:text-[42px] leading-tight font-semibold text-[#1E2A27] tracking-tight break-words">
                   {activeEntry.lemma}
                 </h2>
-                <p className="mt-2 text-base text-[#64706D]">{activeEntry.pos}</p>
+                <p className="mt-2 text-base text-[#657470]">{activeEntry.pos}</p>
               </div>
 
               {/* Circular Speaker Button */}
@@ -650,27 +650,27 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
                     speakPaliText(activeEntry.lemma);
                   }}
                   aria-label="播放单词发音"
-                  className="w-16 h-16 rounded-full bg-[#EBF3F1] text-[#1E625E] flex items-center justify-center hover:bg-[#DDF0ED] active:scale-95 transition-all cursor-pointer"
+                  className="w-16 h-16 rounded-full bg-[#EAF2EF] text-[#25635E] flex items-center justify-center hover:bg-[#DCECE7] active:scale-95 transition-all cursor-pointer"
                 >
                   <Volume2 className="w-7 h-7 stroke-[2]" />
                 </button>
               </div>
 
-              <div className="border-t border-[#EEF2F0] my-6" />
+              <div className="border-t border-[#E8EEEB] my-6" />
 
               {/* Meanings: 中 & EN */}
               <div className="space-y-3.5">
                 <div className="flex items-center gap-3">
-                  <span className="inline-flex items-center justify-center rounded-md bg-[#E0EFEA] px-2 py-0.5 text-xs font-bold text-[#1E625E] shrink-0">
+                  <span className="inline-flex items-center justify-center rounded-md bg-[#E2EFEA] px-2 py-0.5 text-xs font-bold text-[#25635E] shrink-0">
                     中
                   </span>
-                  <span className="text-2xl font-bold text-[#141D1B] tracking-tight">
+                  <span className="text-2xl font-bold text-[#1E2A27] tracking-tight">
                     {activeEntry.meaningZh}
                   </span>
                 </div>
 
                 <div className="flex items-start gap-3">
-                  <span className="inline-flex items-center justify-center rounded-md bg-[#E0EFEA] px-1.5 py-0.5 text-xs font-bold text-[#1E625E] shrink-0 mt-1">
+                  <span className="inline-flex items-center justify-center rounded-md bg-[#E2EFEA] px-1.5 py-0.5 text-xs font-bold text-[#25635E] shrink-0 mt-1">
                     EN
                   </span>
                   <span className="text-lg text-[#2C3735] leading-snug">
@@ -685,7 +685,7 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
                   {activeEntry.components.map((comp, idx) => (
                     <React.Fragment key={comp.form}>
                       {idx > 0 && <span className="text-[#7A8783] text-sm font-medium">+</span>}
-                      <span className="inline-flex items-center gap-1.5 rounded-xl bg-[#EFF2F0] px-3.5 py-1.5 text-sm text-[#2C3735]">
+                      <span className="inline-flex items-center gap-1.5 rounded-xl bg-[#F0F4F1] px-3.5 py-1.5 text-sm text-[#2C3735]">
                         <span className="font-pali font-medium">{comp.form}</span>
                         <span>{comp.gloss}</span>
                       </span>
@@ -699,7 +699,7 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
                     e.stopPropagation();
                     onOpenInflection(activeEntry);
                   }}
-                  className="inline-flex items-center gap-1 text-xs font-medium text-[#1E625E] hover:underline py-1 cursor-pointer"
+                  className="inline-flex items-center gap-1 text-xs font-medium text-[#25635E] hover:underline py-1 cursor-pointer"
                 >
                   <Table2 className="w-3.5 h-3.5" />
                   <span>词形表</span>
@@ -712,16 +712,16 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
                   e.stopPropagation();
                   speakPaliText(activeEntry.example.pali);
                 }}
-                className="mt-6 rounded-2xl bg-[#EEF3F1] p-4 sm:p-5 cursor-pointer hover:bg-[#E5EEEB] transition-colors"
+                className="mt-6 rounded-2xl bg-[#EEF3F0] p-4 sm:p-5 cursor-pointer hover:bg-[#E5EEE9] transition-colors"
               >
-                <div className="flex items-center justify-between text-xs text-[#64706D]">
+                <div className="flex items-center justify-between text-xs text-[#657470]">
                   <span>例句 · {activeEntry.example.ref}</span>
-                  <span className="text-[11px] text-[#1E625E]">点击朗读例句</span>
+                  <span className="text-[11px] text-[#25635E]">点击朗读例句</span>
                 </div>
-                <p className="mt-2 font-pali text-xl sm:text-[22px] text-[#141D1B] leading-relaxed">
+                <p className="mt-2 font-pali text-xl sm:text-[22px] text-[#1E2A27] leading-relaxed">
                   {renderHighlightedExample(activeEntry.example.pali, activeEntry.example.highlight)}
                 </p>
-                <p className="mt-1.5 text-sm text-[#52605C]">{activeEntry.example.zh}</p>
+                <p className="mt-1.5 text-sm text-[#566561]">{activeEntry.example.zh}</p>
               </div>
             </div>
           )}
@@ -732,7 +732,7 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
               <button
                 type="button"
                 onClick={handleFlipToBack}
-                className="w-full rounded-2xl bg-[#1E625E] py-4 px-6 text-base font-bold text-white shadow-xs hover:bg-[#174E4A] active:scale-[0.99] transition-all cursor-pointer"
+                className="w-full rounded-2xl bg-[#25635E] py-4 px-6 text-base font-bold text-white shadow-xs hover:bg-[#1E524E] active:scale-[0.99] transition-all cursor-pointer"
               >
                 显示答案（翻转词卡）
               </button>
@@ -742,37 +742,37 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
               <button
                 type="button"
                 onClick={() => handleRate('again')}
-                className="rounded-2xl bg-white border border-[#DCE4E1] py-3.5 px-2 flex flex-col items-center justify-center hover:bg-[#FAFBF9] active:scale-[0.98] transition-all cursor-pointer"
+                className="rounded-2xl bg-[#FAFBF9] border border-[#DCE5E1] py-3.5 px-2 flex flex-col items-center justify-center hover:bg-[#F1F5F2] active:scale-[0.98] transition-all cursor-pointer"
               >
-                <span className="text-base font-bold text-[#141D1B]">重来</span>
-                <span className="mt-0.5 text-xs text-[#64706D]">{intervalPreview.again}</span>
+                <span className="text-base font-bold text-[#1E2A27]">重来</span>
+                <span className="mt-0.5 text-xs text-[#657470]">{intervalPreview.again}</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => handleRate('hard')}
-                className="rounded-2xl bg-white border border-[#DCE4E1] py-3.5 px-2 flex flex-col items-center justify-center hover:bg-[#FAFBF9] active:scale-[0.98] transition-all cursor-pointer"
+                className="rounded-2xl bg-[#FAFBF9] border border-[#DCE5E1] py-3.5 px-2 flex flex-col items-center justify-center hover:bg-[#F1F5F2] active:scale-[0.98] transition-all cursor-pointer"
               >
-                <span className="text-base font-bold text-[#141D1B]">困难</span>
-                <span className="mt-0.5 text-xs text-[#64706D]">{intervalPreview.hard}</span>
+                <span className="text-base font-bold text-[#1E2A27]">困难</span>
+                <span className="mt-0.5 text-xs text-[#657470]">{intervalPreview.hard}</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => handleRate('good')}
-                className="rounded-2xl bg-[#1E625E] border border-[#1E625E] py-3.5 px-2 flex flex-col items-center justify-center text-white shadow-xs hover:bg-[#174E4A] active:scale-[0.98] transition-all cursor-pointer"
+                className="rounded-2xl bg-[#25635E] border border-[#25635E] py-3.5 px-2 flex flex-col items-center justify-center text-white shadow-xs hover:bg-[#1E524E] active:scale-[0.98] transition-all cursor-pointer"
               >
                 <span className="text-base font-bold">记得</span>
-                <span className="mt-0.5 text-xs text-[#D5EAE6]">{intervalPreview.good}</span>
+                <span className="mt-0.5 text-xs text-[#D6EBE7]">{intervalPreview.good}</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => handleRate('easy')}
-                className="rounded-2xl bg-white border border-[#DCE4E1] py-3.5 px-2 flex flex-col items-center justify-center hover:bg-[#FAFBF9] active:scale-[0.98] transition-all cursor-pointer"
+                className="rounded-2xl bg-[#FAFBF9] border border-[#DCE5E1] py-3.5 px-2 flex flex-col items-center justify-center hover:bg-[#F1F5F2] active:scale-[0.98] transition-all cursor-pointer"
               >
-                <span className="text-base font-bold text-[#141D1B]">轻松</span>
-                <span className="mt-0.5 text-xs text-[#64706D]">{intervalPreview.easy}</span>
+                <span className="text-base font-bold text-[#1E2A27]">轻松</span>
+                <span className="mt-0.5 text-xs text-[#657470]">{intervalPreview.easy}</span>
               </button>
             </div>
           )}

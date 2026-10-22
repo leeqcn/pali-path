@@ -341,13 +341,13 @@ export function App() {
   };
 
   return (
-    <div className="min-h-svh bg-[#F5F6F4] text-[#141D1B] selection:bg-[#DDF0ED]">
+    <div className="min-h-svh bg-[#F2F4F0] text-[#1E2A27] selection:bg-[#DCECE8]">
       <OfflineIndicator />
 
       {/* Live Audio Playing Indicator */}
       {activeAudioLabel && (
-        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full bg-[#16211F] px-4 py-1.5 text-xs font-medium text-[#E2EFED] shadow-lg max-w-[90vw]">
-          <Volume2 className="w-3.5 h-3.5 text-[#5ED4C8] shrink-0" />
+        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full bg-[#1F2E2B]/95 backdrop-blur-md px-4 py-1.5 text-xs font-medium text-[#E5F0ED] shadow-md max-w-[90vw]">
+          <Volume2 className="w-3.5 h-3.5 text-[#72D6CA] shrink-0" />
           <span className="truncate font-pali">正在朗读：{activeAudioLabel}</span>
         </div>
       )}
@@ -442,104 +442,66 @@ export function App() {
             type="button"
             onClick={() => setBottomNavCollapsed(false)}
             aria-label="展开底部导航菜单"
-            className="inline-flex items-center gap-1.5 rounded-full bg-[#16211F]/90 backdrop-blur-md text-white px-3.5 py-2 text-xs font-medium shadow-lg hover:bg-[#1E625E] transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 rounded-full bg-[#20302D]/90 backdrop-blur-md text-[#F4F7F5] px-3.5 py-2 text-xs font-medium shadow-md hover:bg-[#25635E] transition-colors cursor-pointer"
           >
             <ChevronUp className="w-3.5 h-3.5" />
-            <span>展开菜单</span>
+            <span>展开导航</span>
           </button>
         </div>
       ) : (
         <nav
           aria-label="主导航"
-          className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-[#E6EBE8]"
+          className="fixed bottom-0 left-0 right-0 z-40 bg-[#FAFBF9]/95 backdrop-blur-md border-t border-[#E2EAE6]"
         >
-          <div className="max-w-lg mx-auto relative grid grid-cols-4 items-center h-16 px-2">
+          <div className="max-w-lg mx-auto relative grid grid-cols-4 items-center h-16 px-2.5">
             {/* Collapse Toggle Handle */}
             <button
               type="button"
               onClick={() => setBottomNavCollapsed(true)}
-              title="收起底部菜单"
-              aria-label="收起底部菜单"
-              className="absolute -top-3.5 right-3 w-7 h-3.5 rounded-t-lg bg-white border border-b-0 border-[#E6EBE8] text-[#7A8783] hover:text-[#141D1B] flex items-center justify-center cursor-pointer"
+              title="收起底部导航"
+              aria-label="收起底部导航"
+              className="absolute -top-3.5 right-3 w-7 h-3.5 rounded-t-lg bg-[#FAFBF9] border border-b-0 border-[#E2EAE6] text-[#7A8783] hover:text-[#1E2A27] flex items-center justify-center cursor-pointer"
             >
               <ChevronDown className="w-3.5 h-3.5" />
             </button>
 
-            <button
-              type="button"
-              onClick={() => handleSwitchTab('today')}
-              className={`flex flex-col items-center justify-center h-full transition-colors cursor-pointer ${
-                activeTab === 'today' ? 'text-[#1E625E]' : 'text-[#64706D] hover:text-[#141D1B]'
-              }`}
-            >
-              <CheckCircle2
-                className={`w-6 h-6 ${activeTab === 'today' ? 'stroke-[2.2]' : 'stroke-[1.75]'}`}
-              />
-              <span
-                className={`text-xs mt-1 ${
-                  activeTab === 'today' ? 'font-bold' : 'font-medium'
-                }`}
-              >
-                今日
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleSwitchTab('cards')}
-              className={`flex flex-col items-center justify-center h-full transition-colors cursor-pointer ${
-                activeTab === 'cards' ? 'text-[#1E625E]' : 'text-[#64706D] hover:text-[#141D1B]'
-              }`}
-            >
-              <Layers
-                className={`w-6 h-6 ${activeTab === 'cards' ? 'stroke-[2.2]' : 'stroke-[1.75]'}`}
-              />
-              <span
-                className={`text-xs mt-1 ${
-                  activeTab === 'cards' ? 'font-bold' : 'font-medium'
-                }`}
-              >
-                词卡
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleSwitchTab('grammar')}
-              className={`flex flex-col items-center justify-center h-full transition-colors cursor-pointer ${
-                activeTab === 'grammar' ? 'text-[#1E625E]' : 'text-[#64706D] hover:text-[#141D1B]'
-              }`}
-            >
-              <AlignLeft
-                className={`w-6 h-6 ${activeTab === 'grammar' ? 'stroke-[2.2]' : 'stroke-[1.75]'}`}
-              />
-              <span
-                className={`text-xs mt-1 ${
-                  activeTab === 'grammar' ? 'font-bold' : 'font-medium'
-                }`}
-              >
-                语法
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleSwitchTab('reader')}
-              className={`flex flex-col items-center justify-center h-full transition-colors cursor-pointer ${
-                activeTab === 'reader' ? 'text-[#1E625E]' : 'text-[#64706D] hover:text-[#141D1B]'
-              }`}
-            >
-              <BookOpen
-                className={`w-6 h-6 ${activeTab === 'reader' ? 'stroke-[2.2]' : 'stroke-[1.75]'}`}
-              />
-              <span
-                className={`text-xs mt-1 ${
-                  activeTab === 'reader' ? 'font-bold' : 'font-medium'
-                }`}
-              >
-                阅读
-              </span>
-            </button>
+            {(
+              [
+                { id: 'today', label: '今日', Icon: CheckCircle2 },
+                { id: 'cards', label: '词卡', Icon: Layers },
+                { id: 'grammar', label: '语法', Icon: AlignLeft },
+                { id: 'reader', label: '阅读', Icon: BookOpen },
+              ] as const
+            ).map(({ id, label, Icon }) => {
+              const isActive = activeTab === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => handleSwitchTab(id)}
+                  className={`flex flex-col items-center justify-center h-full transition-colors cursor-pointer ${
+                    isActive ? 'text-[#25635E]' : 'text-[#687773] hover:text-[#1E2A27]'
+                  }`}
+                >
+                  <div
+                    className={`px-3.5 py-1 rounded-full transition-colors flex items-center justify-center ${
+                      isActive ? 'bg-[#E7F1EE]' : 'bg-transparent'
+                    }`}
+                  >
+                    <Icon
+                      className={`w-5 h-5 ${isActive ? 'stroke-[2.2]' : 'stroke-[1.75]'}`}
+                    />
+                  </div>
+                  <span
+                    className={`text-[11px] mt-0.5 ${
+                      isActive ? 'font-bold text-[#25635E]' : 'font-medium'
+                    }`}
+                  >
+                    {label}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </nav>
       )}

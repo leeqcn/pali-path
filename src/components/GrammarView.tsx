@@ -126,42 +126,42 @@ export const GrammarView: React.FC<GrammarViewProps> = ({
               }}
               className={`rounded-2xl p-4 text-left border transition-all cursor-pointer ${
                 isSelected
-                  ? 'bg-white border-[1.5px] border-[#1E625E] shadow-2xs'
-                  : 'bg-white/70 border-[#E6EBE8] hover:bg-white'
+                  ? 'bg-[#FAFBF9] border-[1.5px] border-[#25635E] shadow-[0_4px_20px_-4px_rgba(30,44,41,0.035)]'
+                  : 'bg-[#FAFBF9]/65 border-[#E3EAE6] hover:bg-[#FAFBF9]'
               }`}
             >
               <div className="flex items-center justify-between">
-                <span className="font-mono-num text-xs font-bold text-[#1E625E]">
+                <span className="font-mono-num text-xs font-bold text-[#25635E]">
                   第 {topic.number} 讲
                 </span>
                 <span className="text-[11px] text-[#7A8783]">
                   {topic.exercises.length} 道练习
                 </span>
               </div>
-              <h2 className="mt-1 text-base font-bold text-[#141D1B]">{topic.titleZh}</h2>
-              <p className="mt-0.5 font-pali text-xs text-[#64706D] truncate">{topic.titlePali}</p>
+              <h2 className="mt-1 text-base font-bold text-[#1E2A27]">{topic.titleZh}</h2>
+              <p className="mt-0.5 font-pali text-xs text-[#657470] truncate">{topic.titlePali}</p>
             </button>
           );
         })}
       </div>
 
       {/* Static Markdown-style Grammar Reference Content */}
-      <div className="mt-5 rounded-3xl bg-white p-6 border border-[#E6EBE8] space-y-6">
-        <div className="border-b border-[#EEF2F0] pb-4 flex flex-wrap items-start justify-between gap-2">
+      <div className="mt-5 rounded-3xl bg-[#FAFBF9] p-6 border border-[#E3EAE6] shadow-[0_4px_20px_-4px_rgba(30,44,41,0.035)] space-y-6">
+        <div className="border-b border-[#E8EEEB] pb-4 flex flex-wrap items-start justify-between gap-2">
           <div>
-            <div className="text-xs font-semibold text-[#1E625E]">
+            <div className="text-xs font-semibold text-[#25635E]">
               第 {activeTopic.number} 讲 · 预计学习 {activeTopic.readingMinutes} 分钟
             </div>
-            <h2 className="mt-1 text-xl sm:text-2xl font-bold text-[#141D1B]">
+            <h2 className="mt-1 text-xl sm:text-2xl font-bold text-[#1E2A27]">
               {activeTopic.titleZh}
             </h2>
-            <p className="mt-1 text-sm text-[#52605C] leading-relaxed">{activeTopic.summary}</p>
+            <p className="mt-1 text-sm text-[#566561] leading-relaxed">{activeTopic.summary}</p>
           </div>
           {onMarkGrammarDone && (
             <button
               type="button"
               onClick={() => void onMarkGrammarDone()}
-              className="rounded-xl bg-[#EBF3F1] px-3.5 py-2 text-xs font-semibold text-[#1E625E] hover:bg-[#DDF0ED] shrink-0 cursor-pointer"
+              className="rounded-xl bg-[#EAF2EF] px-3.5 py-2 text-xs font-semibold text-[#25635E] hover:bg-[#DCECE7] shrink-0 cursor-pointer"
             >
               标记今日语法已读
             </button>
@@ -170,16 +170,16 @@ export const GrammarView: React.FC<GrammarViewProps> = ({
 
         {activeTopic.sections.map((sec) => (
           <div key={sec.heading} className="space-y-3">
-            <h3 className="text-base font-bold text-[#141D1B]">{sec.heading}</h3>
+            <h3 className="text-base font-bold text-[#1E2A27]">{sec.heading}</h3>
             <div className="text-sm text-[#394441] leading-relaxed whitespace-pre-line">
               {sec.body}
             </div>
 
             {sec.table && (
-              <div className="overflow-x-auto rounded-2xl border border-[#E6EBE8]">
+              <div className="overflow-x-auto rounded-2xl border border-[#E3EAE6]">
                 <table className="w-full text-left border-collapse text-xs sm:text-sm">
                   <thead>
-                    <tr className="bg-[#F5F6F4] text-[#52605C] border-b border-[#E6EBE8]">
+                    <tr className="bg-[#F2F5F1] text-[#566561] border-b border-[#E3EAE6]">
                       {sec.table.headers.map((h) => (
                         <th key={h} className="py-2.5 px-3.5 font-semibold whitespace-nowrap">
                           {h}
@@ -187,14 +187,14 @@ export const GrammarView: React.FC<GrammarViewProps> = ({
                       ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#EEF2F0]">
+                  <tbody className="divide-y divide-[#EAEFEA]">
                     {sec.table.rows.map((row, rIdx) => (
-                      <tr key={rIdx} className="hover:bg-[#FAFBF9]">
+                      <tr key={rIdx} className="hover:bg-[#F5F8F5]">
                         {row.map((cell, cIdx) => (
                           <td
                             key={cIdx}
                             className={`py-2.5 px-3.5 ${
-                              cIdx >= 1 ? 'font-pali text-[#141D1B]' : 'font-medium text-[#2C3735]'
+                              cIdx >= 1 ? 'font-pali text-[#1E2A27]' : 'font-medium text-[#2C3735]'
                             }`}
                           >
                             {cell}
@@ -211,11 +211,11 @@ export const GrammarView: React.FC<GrammarViewProps> = ({
       </div>
 
       {/* Interactive Grammar Quiz Section */}
-      <div className="mt-6 rounded-3xl bg-white p-6 border border-[#E6EBE8]">
-        <div className="flex flex-wrap items-center justify-between gap-2 pb-4 border-b border-[#EEF2F0]">
+      <div className="mt-6 rounded-3xl bg-[#FAFBF9] p-6 border border-[#E3EAE6] shadow-[0_4px_20px_-4px_rgba(30,44,41,0.035)]">
+        <div className="flex flex-wrap items-center justify-between gap-2 pb-4 border-b border-[#E8EEEB]">
           <div className="flex items-center gap-2">
-            <HelpCircle className="w-5 h-5 text-[#1E625E]" />
-            <h3 className="text-lg font-bold text-[#141D1B]">
+            <HelpCircle className="w-5 h-5 text-[#25635E]" />
+            <h3 className="text-lg font-bold text-[#1E2A27]">
               随堂互动小练习（{completedInTopic} / {activeTopic.exercises.length} 已作答
               {completedInTopic > 0 ? ` · 正确 ${correctInTopic} 题` : ''}）
             </h3>
@@ -224,7 +224,7 @@ export const GrammarView: React.FC<GrammarViewProps> = ({
             <button
               type="button"
               onClick={handleResetQuiz}
-              className="inline-flex items-center gap-1 text-xs font-medium text-[#1E625E] hover:underline cursor-pointer"
+              className="inline-flex items-center gap-1 text-xs font-medium text-[#25635E] hover:underline cursor-pointer"
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span>重做本节练习</span>
@@ -233,7 +233,7 @@ export const GrammarView: React.FC<GrammarViewProps> = ({
         </div>
 
         {displayedExercises.length === 0 ? (
-          <div className="py-8 text-center text-sm text-[#64706D]">
+          <div className="py-8 text-center text-sm text-[#657470]">
             当前章节暂无错题记录，点击上方「显示全部题目」可查看所有练习。
           </div>
         ) : (
@@ -246,7 +246,7 @@ export const GrammarView: React.FC<GrammarViewProps> = ({
               return (
                 <div
                   key={q.id}
-                  className="rounded-2xl bg-[#F8FAF9] p-4 sm:p-5 border border-[#E6EBE8] space-y-3"
+                  className="rounded-2xl bg-[#F3F6F3] p-4 sm:p-5 border border-[#E2EAE6] space-y-3"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="space-y-1">

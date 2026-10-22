@@ -9,12 +9,12 @@
 
   body {
     margin: 0;
-    background-color: #F5F6F4;
-    color: #141D1B;
+    background-color: #F2F4F0;
+    color: #1E2A27;
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    selection-background-color: #DDF0ED;
+    selection-background-color: #DCECE8;
   }
 }
 
@@ -35,7 +35,14 @@
 .pali-word-dotted {
   text-decoration-line: underline;
   text-decoration-style: dotted;
-  text-decoration-color: rgba(30, 98, 94, 0.55);
+  text-decoration-color: rgba(37, 99, 94, 0.45);
   text-underline-offset: 6px;
-  text-decoration-thickness: 2px;
+  text-decoration-thickness: 1.75px;
+}
+
+/* Soft paper card surface helper */
+.soft-card {
+  background-color: #FAFBF9;
+  border-color: #E3EAE6;
+  box-shadow: 0 4px 20px -4px rgba(30, 44, 41, 0.035);
 }
