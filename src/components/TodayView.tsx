@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
   BookOpen,
@@ -7,10 +7,15 @@ import {
   ChevronRight,
   ChevronUp,
   Database,
+  Download,
   ExternalLink,
+  History,
   Menu,
   RotateCcw,
+  Save,
+  ShieldCheck,
   SlidersHorizontal,
+  Upload,
   Volume2,
   X,
 } from 'lucide-react';
@@ -23,7 +28,11 @@ import {
   type CurriculumCourse,
   type SuttaItem,
 } from '../data/paliData';
-import type { FlashcardRecord, GrammarAttemptRecord } from '../db/database';
+import type {
+  FlashcardRecord,
+  GrammarAttemptRecord,
+  SavedSnapshotItem,
+} from '../db/database';
 import { speakPaliText } from '../utils/paliAudio';
 import { PWAInstallButton } from './PWAInstallButton';
 
@@ -39,6 +48,18 @@ interface TodayViewProps {
   onSelectCourse: (courseId: string) => Promise<void>;
   onResetToZero: () => Promise<void>;
   onRestoreSample: () => Promise<void>;
+  // Phase 3: Auto-Save & Manual Save & Backup Props
+  autoSaveEnabled: boolean;
+  lastSavedAt: number | null;
+  lastSaveType: 'auto' | 'manual';
+  savedSnapshots: SavedSnapshotItem[];
+  isStoragePersisted: boolean;
+  onToggleAutoSave: (enabled: boolean) => Promise<void>;
+  onManualSave: (customLabel?: string) => Promise<void>;
+  onRestoreSnapshot: (snapshotId: string) => Promise<void>;
+  onExportBackupFile: () => Promise<string>;
+  onImportBackupFile: (jsonText: string) => Promise<void>;
+  onRequestPersistStorage: () => Promise<boolean>;
   taskStatus: {
     cardsDone: boolean;
     grammarDone: boolean;
@@ -54,6 +75,15 @@ interface TodayViewProps {
   onStartReadingTask: (suttaId: string) => void;
 }
 
+function formatSaveTime(ts: number | null): string {
+  if (!ts) return '尚未保存';
+  const date = new Date(ts);
+  const hh = String(date.getHours()).padStart(2, '0');
+  const mm = String(date.getMinutes()).padStart(2, '0');
+  const ss = String(date.getSeconds()).padStart(2, '0');
+  return `${hh}:${mm}:${ss}`;
+}
+
 export const TodayView: React.FC<TodayViewProps> = ({
   cards,
   grammarAttempts,
@@ -66,6 +96,17 @@ export const TodayView: React.FC<TodayViewProps> = ({
   onSelectCourse,
   onResetToZero,
   onRestoreSample,
+  autoSaveEnabled,
+  lastSavedAt,
+  lastSaveType,
+  savedSnapshots,
+  isStoragePersisted,
+  onToggleAutoSave,
+  onManualSave,
+  onRestoreSnapshot,
+  onExportBackupFile,
+  onImportBackupFile,
+  onRequestPersistStorage,
   taskStatus,
   onToggleTaskDone,
   onStartFlashcardReview,
@@ -78,6 +119,7 @@ export const TodayView: React.FC<TodayViewProps> = ({
   const [showMenuDrawer, setShowMenuDrawer] = useState(false);
   const [confirmResetStep, setConfirmResetStep] = useState(false);
   const [bannerMsg, setBannerMsg] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const currentCourse: CurriculumCourse = useMemo(
     () => CURRICULUM_COURSES.find((c) => c.id === selectedCourseId) ?? CURRICULUM_COURSES[0],
@@ -120,6 +162,24 @@ export const TodayView: React.FC<TodayViewProps> = ({
       onStartReadingTask(courseSutta.id);
     } else {
       onStartFlashcardReview();
+    }
+  };
+
+  const handleImportFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      await onImportBackupFile(text);
+      setShowMenuDrawer(false);
+      setBannerMsg(`已成功从备份文件「${file.name}」恢复学习进度！`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '导入备份文件失败';
+      setBannerMsg(`导入失败：${msg}`);
+    } finally {
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
@@ -521,7 +581,7 @@ export const TodayView: React.FC<TodayViewProps> = ({
             <div className="flex items-center justify-between pb-3 border-b border-[#EEF2F0]">
               <div className="flex items-center gap-2">
                 <SlidersHorizontal className="w-4 h-4 text-[#1E625E]" />
-                <h3 className="text-lg font-bold text-[#141D1B]">学习设置与阶梯选课菜单</h3>
+                <h3 className="text-lg font-bold text-[#141D1B]">学习设置与防丢备份中心</h3>
               </div>
               <button
                 type="button"
@@ -530,6 +590,174 @@ export const TodayView: React.FC<TodayViewProps> = ({
               >
                 <X className="w-5 h-5" />
               </button>
+            </div>
+
+            {/* 0. Phase 3: 防丢数据与保存设置（自动保存开关 + 手动保存 + 导出/导入 JSON） */}
+            <div className="rounded-2xl bg-[#F5F8F7] border border-[#DCE8E5] p-4 space-y-3.5">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-[#1E625E]" />
+                  <span className="text-sm font-bold text-[#141D1B]">
+                    防丢数据保护（自动保存 & 手动保存）
+                  </span>
+                </div>
+                <span className="text-[11px] text-[#1E625E] font-medium">
+                  上次{lastSaveType === 'manual' ? '手动' : '自动'}：{formatSaveTime(lastSavedAt)}
+                </span>
+              </div>
+
+              {/* Auto-Save Toggle Row */}
+              <div className="flex items-center justify-between gap-3 rounded-xl bg-white p-3 border border-[#E6EBE8]">
+                <div className="min-w-0">
+                  <div className="text-xs font-bold text-[#141D1B]">
+                    自动保存学习进度（双层镜像防丢失）
+                  </div>
+                  <p className="text-[11px] text-[#64706D] mt-0.5 leading-snug">
+                    开启后，每次词卡评分、语法练习、阅读经文或切换课程时自动同步至本地镜像
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={autoSaveEnabled}
+                  onClick={async () => {
+                    const nextVal = !autoSaveEnabled;
+                    await onToggleAutoSave(nextVal);
+                    setBannerMsg(
+                      nextVal
+                        ? '已开启自动保存：学习进度将实时自动备份。'
+                        : '已切换为手动保存模式：您可随时点击「手动保存」备份进度。'
+                    );
+                  }}
+                  className={`w-12 h-7 rounded-full transition-colors p-0.5 shrink-0 cursor-pointer ${
+                    autoSaveEnabled ? 'bg-[#1E625E]' : 'bg-[#CBD5D2]'
+                  }`}
+                >
+                  <div
+                    className={`w-6 h-6 rounded-full bg-white shadow-xs transition-transform ${
+                      autoSaveEnabled ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Manual Save & Export / Import JSON Buttons */}
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await onManualSave('手动保存存档点');
+                    setBannerMsg(`已手动创建本地存档快照（${formatSaveTime(Date.now())}）！`);
+                  }}
+                  className="rounded-xl bg-[#1E625E] text-white py-2.5 px-2 text-xs font-bold flex flex-col items-center justify-center gap-1 hover:bg-[#174E4A] transition-colors cursor-pointer"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>立即手动保存</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const fileName = await onExportBackupFile();
+                    setBannerMsg(`已导出备份文件：${fileName}`);
+                  }}
+                  className="rounded-xl bg-white border border-[#CEDAD7] text-[#1E625E] py-2.5 px-2 text-xs font-bold flex flex-col items-center justify-center gap-1 hover:bg-[#EBF3F1] transition-colors cursor-pointer"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>导出备份 .json</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="rounded-xl bg-white border border-[#CEDAD7] text-[#141D1B] py-2.5 px-2 text-xs font-bold flex flex-col items-center justify-center gap-1 hover:bg-[#EBF3F1] transition-colors cursor-pointer"
+                >
+                  <Upload className="w-4 h-4 text-[#1E625E]" />
+                  <span>导入恢复 .json</span>
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".json,application/json"
+                  onChange={handleImportFileChange}
+                  className="hidden"
+                />
+              </div>
+
+              {/* Browser Persistent Storage Protection Status */}
+              <div className="flex items-center justify-between text-[11px] text-[#52605C] pt-1">
+                <span>
+                  浏览器防清理保护：
+                  {isStoragePersisted
+                    ? '已开启持久化存储 (Persistent Storage)'
+                    : '标准本地存储 + 双层镜像已启用'}
+                </span>
+                {!isStoragePersisted && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const granted = await onRequestPersistStorage();
+                      setBannerMsg(
+                        granted
+                          ? '浏览器已授予持久化存储保护，离线词库与进度不会被系统自动清理。'
+                          : '已启用 IndexedDB + LocalStorage 双层防丢镜像保护。'
+                      );
+                    }}
+                    className="text-[#1E625E] font-semibold hover:underline cursor-pointer"
+                  >
+                    申请持久化权限
+                  </button>
+                )}
+              </div>
+
+              {/* Saved Snapshots History (One-Click Rollback) */}
+              {savedSnapshots.length > 0 && (
+                <div className="pt-2 border-t border-[#DCE8E5] space-y-1.5">
+                  <div className="flex items-center gap-1 text-[11px] font-bold text-[#52605C]">
+                    <History className="w-3.5 h-3.5 text-[#1E625E]" />
+                    <span>最近保存的本地快照（可随时一键恢复）</span>
+                  </div>
+                  <div className="space-y-1.5 max-h-36 overflow-y-auto pr-0.5">
+                    {savedSnapshots.slice(0, 4).map((snap) => (
+                      <div
+                        key={snap.id}
+                        className="rounded-xl bg-white px-3 py-2 border border-[#E6EBE8] flex items-center justify-between gap-2 text-xs"
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span
+                              className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
+                                snap.saveType === 'manual'
+                                  ? 'bg-[#1E625E] text-white'
+                                  : 'bg-[#EBF3F1] text-[#1E625E]'
+                              }`}
+                            >
+                              {snap.saveType === 'manual' ? '手动' : '自动'}
+                            </span>
+                            <span className="font-semibold text-[#141D1B] truncate">
+                              {snap.label}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-[#64706D] mt-0.5">
+                            {formatSaveTime(snap.timestamp)} · 掌握 {snap.summary.masteredCount} 词 · 连续 {snap.summary.streakDays} 天
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            await onRestoreSnapshot(snap.id);
+                            setShowMenuDrawer(false);
+                            setBannerMsg(`已恢复至存档快照：「${snap.label}」(${formatSaveTime(snap.timestamp)})`);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-[#EBF3F1] text-[#1E625E] text-[11px] font-bold hover:bg-[#DDF0ED] shrink-0 cursor-pointer"
+                        >
+                          恢复此存档
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* 1. Daily Card Count Setting */}
@@ -629,7 +857,7 @@ export const TodayView: React.FC<TodayViewProps> = ({
 
             {/* 3. Reset Progress / Restore Sample + PWA Install */}
             <div className="pt-3 border-t border-[#EEF2F0] space-y-2.5">
-              <label className="text-sm font-bold text-[#141D1B] block">进度管理与应用安装</label>
+              <label className="text-sm font-bold text-[#141D1B] block">进度重置与示例恢复</label>
 
               {!confirmResetStep ? (
                 <div className="flex flex-wrap items-center gap-2">

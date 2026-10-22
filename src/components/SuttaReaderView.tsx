@@ -47,6 +47,7 @@ export const SuttaReaderView: React.FC<SuttaReaderViewProps> = ({
 
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'dhammapada' | 'khuddakapatha'>('all');
   const [activeSentenceIdx, setActiveSentenceIdx] = useState(0);
+  const [readSentenceIds, setReadSentenceIds] = useState<string[]>([]);
   // First sentence of each Sutta visible by default (matching Image 3), other sentences toggleable via "显示译文"
   const [visibleTranslations, setVisibleTranslations] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(
@@ -62,14 +63,66 @@ export const SuttaReaderView: React.FC<SuttaReaderViewProps> = ({
   const [loopAudio, setLoopAudio] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1.0);
 
+  // Load saved reading position & read sentences for currentSutta from IndexedDB
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const saved = await db.suttaProgress.get(currentSutta.id);
+      if (cancelled) return;
+      if (saved) {
+        const validIdx = Math.min(
+          Math.max(0, saved.lastSentenceIdx ?? 0),
+          Math.max(0, currentSutta.sentences.length - 1)
+        );
+        setActiveSentenceIdx(validIdx);
+        setReadSentenceIds(saved.readSentenceIds ?? []);
+        const firstTok =
+          currentSutta.sentences[validIdx]?.tokens[0] ?? currentSutta.sentences[0]?.tokens[0];
+        if (firstTok) {
+          setSelectedToken(firstTok);
+        }
+      } else {
+        setActiveSentenceIdx(0);
+        setReadSentenceIds([]);
+        if (currentSutta.sentences[0]?.tokens[0]) {
+          setSelectedToken(currentSutta.sentences[0].tokens[0]);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentSutta]);
+
+  const recordSentenceProgress = async (
+    sutta: SuttaItem,
+    sentenceIdx: number,
+    mode: 'read' | 'listen'
+  ) => {
+    const sentence = sutta.sentences[sentenceIdx];
+    if (!sentence) return;
+    const existing = await db.suttaProgress.get(sutta.id);
+    const nextRead = new Set(existing?.readSentenceIds ?? []);
+    const nextListened = new Set(existing?.listenedSentenceIds ?? []);
+    nextRead.add(sentence.id);
+    if (mode === 'listen') {
+      nextListened.add(sentence.id);
+    }
+    const nextReadArr = Array.from(nextRead);
+    setReadSentenceIds(nextReadArr);
+    await db.suttaProgress.put({
+      suttaId: sutta.id,
+      readSentenceIds: nextReadArr,
+      listenedSentenceIds: Array.from(nextListened),
+      lastSentenceIdx: sentenceIdx,
+      updatedAt: Date.now(),
+    });
+  };
+
   const handleSwitchSutta = (sutta: SuttaItem) => {
     stopPaliAudio();
     setIsPlayingAudio(false);
     onSelectSuttaId(sutta.id);
-    setActiveSentenceIdx(0);
-    if (sutta.sentences[0]?.tokens[0]) {
-      setSelectedToken(sutta.sentences[0].tokens[0]);
-    }
     setShowSuttaList(false);
   };
 
@@ -86,6 +139,7 @@ export const SuttaReaderView: React.FC<SuttaReaderViewProps> = ({
 
     setActiveSentenceIdx(sentenceIdx);
     setIsPlayingAudio(true);
+    await recordSentenceProgress(targetSutta, sentenceIdx, 'listen');
     await onMarkTaskCompleted('task_audio_done');
     await onMarkTaskCompleted('task_reading_done');
 
@@ -150,6 +204,7 @@ export const SuttaReaderView: React.FC<SuttaReaderViewProps> = ({
     setSelectedToken(token);
     setActiveSentenceIdx(sentenceIdx);
     speakPaliText(token.surface.replace(/[.,;!?]/g, ''), { rate: playbackSpeed });
+    await recordSentenceProgress(currentSutta, sentenceIdx, 'read');
     await onMarkTaskCompleted('task_reading_done');
   };
 
@@ -305,6 +360,7 @@ export const SuttaReaderView: React.FC<SuttaReaderViewProps> = ({
             </h1>
             <p className="text-xs text-[#64706D] mt-0.5">
               {currentSutta.code} · 第 {activeSentenceIdx + 1} / {currentSutta.sentences.length} 句
+              {readSentenceIds.length > 0 && ` · 已精读 ${readSentenceIds.length} 句`}
             </p>
           </div>
         </div>
@@ -313,7 +369,7 @@ export const SuttaReaderView: React.FC<SuttaReaderViewProps> = ({
           <button
             type="button"
             onClick={() => setShowSuttaList(true)}
-            className="inline-flex items-center gap-1 rounded-full bg-[#DCECE9] px-3.5 py-1.5 text-xs font-bold text-[#1E625E] hover:bg-[#CBE3DF] transition-colors"
+            className="inline-flex items-center gap-1 rounded-full bg-[#DCECE9] px-3.5 py-1.5 text-xs font-bold text-[#1E625E] hover:bg-[#CBE3DF] transition-colors cursor-pointer"
           >
             <span>已知词 {knownPercentage}%</span>
           </button>
@@ -336,17 +392,24 @@ export const SuttaReaderView: React.FC<SuttaReaderViewProps> = ({
           const isSentenceActive = sIdx === activeSentenceIdx;
           const isThisPlaying = isSentenceActive && isPlayingAudio;
           const showTranslation = Boolean(visibleTranslations[sentence.id]);
+          const isSentenceRead = readSentenceIds.includes(sentence.id);
 
           return (
             <div
               key={sentence.id}
               onClick={() => setActiveSentenceIdx(sIdx)}
-              className={`rounded-3xl bg-white p-5 transition-all ${
+              className={`rounded-3xl bg-white p-5 transition-all relative ${
                 isSentenceActive
                   ? 'border-[1.5px] border-[#1E625E] shadow-2xs'
                   : 'border border-[#E6EBE8]'
               }`}
             >
+              {isSentenceRead && (
+                <span className="absolute top-3 right-4 inline-flex items-center gap-0.5 text-[10px] font-medium text-[#1E625E]">
+                  <Check className="w-3 h-3" />
+                  <span>已读</span>
+                </span>
+              )}
               <div className="flex items-start gap-3.5">
                 {/* Circular Play / Pause Button */}
                 <button

@@ -1,6 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Check,
+  Keyboard,
   Layers,
   Plus,
   RotateCcw,
@@ -22,6 +23,11 @@ import {
   type FlashcardRecord,
 } from '../db/database';
 import { speakPaliText } from '../utils/paliAudio';
+import {
+  PALI_DIACRITIC_CHARS,
+  convertVelthuisToPali,
+  matchesPaliQuery,
+} from '../utils/paliInput';
 
 interface FlashcardsViewProps {
   cards: FlashcardRecord[];
@@ -57,12 +63,15 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
 }) => {
   const [mode, setMode] = useState<'review' | 'browse'>(initialMode);
   const [searchQuery, setSearchQuery] = useState('');
+  const [velthuisEnabled, setVelthuisEnabled] = useState(true);
   const [statusFilter, setStatusFilter] = useState<
     'all' | 'lv1_2' | 'lv3_4' | 'lv5_6' | 'due' | 'mastered'
   >('all');
 
   // Front/Back flip state: false = Front (only Pāli word), true = Back (full details)
   const [isFlipped, setIsFlipped] = useState<boolean>(false);
+  // Auto-pronounce when flipping card to back
+  const [autoSpeakOnFlip, setAutoSpeakOnFlip] = useState<boolean>(true);
 
   const currentCourse = useMemo(
     () => CURRICULUM_COURSES.find((c) => c.id === selectedCourseId) ?? CURRICULUM_COURSES[0],
@@ -128,22 +137,72 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
     ? getNextIntervalPreview(activeCard)
     : { again: '10 分钟', hard: '1 天', good: '3 天', easy: '7 天' };
 
-  const handleRate = async (rating: CardRating) => {
-    if (!activeCard) return;
-    await rateFlashcard(activeCard.lemma, rating);
-    await onCardsUpdated();
-    setSessionCompletedCount((prev) => prev + 1);
-    setIsFlipped(false); // Reset to Front side for the next card
-
-    if (safeIndex + 1 < reviewQueue.length) {
-      setCurrentIndex(safeIndex + 1);
-    } else {
-      if (onMarkCardsDone) {
-        await onMarkCardsDone();
-      }
-      setShowSessionSummary(true);
+  const handleFlipToBack = useCallback(() => {
+    setIsFlipped(true);
+    if (autoSpeakOnFlip && activeEntry) {
+      speakPaliText(activeEntry.lemma);
     }
-  };
+  }, [autoSpeakOnFlip, activeEntry]);
+
+  const handleRate = useCallback(
+    async (rating: CardRating) => {
+      if (!activeCard) return;
+      await rateFlashcard(activeCard.lemma, rating);
+      await onCardsUpdated();
+      setSessionCompletedCount((prev) => prev + 1);
+      setIsFlipped(false); // Reset to Front side for the next card
+
+      if (safeIndex + 1 < reviewQueue.length) {
+        setCurrentIndex(safeIndex + 1);
+      } else {
+        if (onMarkCardsDone) {
+          await onMarkCardsDone();
+        }
+        setShowSessionSummary(true);
+      }
+    },
+    [activeCard, onCardsUpdated, safeIndex, reviewQueue.length, onMarkCardsDone]
+  );
+
+  // Keyboard shortcuts for smooth study experience:
+  // Space / Enter: flip card | 1/2/3/4: rate card | v/r: play audio
+  useEffect(() => {
+    if (mode !== 'review' || showSessionSummary) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
+        return;
+      }
+
+      if (e.key === ' ' || e.key === 'Enter') {
+        e.preventDefault();
+        if (!isFlipped) {
+          handleFlipToBack();
+        } else {
+          setIsFlipped(false);
+        }
+      } else if (isFlipped && e.key === '1') {
+        e.preventDefault();
+        void handleRate('again');
+      } else if (isFlipped && e.key === '2') {
+        e.preventDefault();
+        void handleRate('hard');
+      } else if (isFlipped && e.key === '3') {
+        e.preventDefault();
+        void handleRate('good');
+      } else if (isFlipped && e.key === '4') {
+        e.preventDefault();
+        void handleRate('easy');
+      } else if (e.key.toLowerCase() === 'v' || e.key.toLowerCase() === 'r') {
+        e.preventDefault();
+        speakPaliText(activeEntry.lemma);
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [mode, showSessionSummary, isFlipped, handleFlipToBack, handleRate, activeEntry]);
 
   const handleToggleDeck = async (lemma: string, currentlyInDeck: boolean) => {
     const { db } = await import('../db/database');
@@ -185,12 +244,11 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
       if (statusFilter === 'mastered' && card?.status !== 'mastered') return false;
 
       if (!searchQuery.trim()) return true;
-      const q = searchQuery.toLowerCase();
       return (
-        entry.lemma.toLowerCase().includes(q) ||
-        entry.meaningZh.includes(q) ||
-        entry.meaningEn.toLowerCase().includes(q) ||
-        entry.root.toLowerCase().includes(q)
+        matchesPaliQuery(entry.lemma, searchQuery) ||
+        matchesPaliQuery(entry.meaningZh, searchQuery) ||
+        matchesPaliQuery(entry.meaningEn, searchQuery) ||
+        matchesPaliQuery(entry.root, searchQuery)
       );
     });
   }, [cards, searchQuery, statusFilter]);
@@ -263,18 +321,61 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
           </div>
         </div>
 
-        {/* Search & Filter Controls */}
-        <div className="mt-3 space-y-2.5">
+        {/* Search & Filter Controls with Pāli Diacritic Bar & Velthuis Input */}
+        <div className="mt-3 space-y-2">
           <div className="relative">
             <Search className="w-4 h-4 text-[#7A8783] absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="搜索巴利词头、词根、中文或英文释义..."
-              className="w-full rounded-2xl bg-white border border-[#E2E8E5] pl-10 pr-4 py-2.5 text-sm text-[#141D1B] placeholder:text-[#8C9894] focus:outline-none focus:border-[#1E625E]"
+              onChange={(e) => {
+                const raw = e.target.value;
+                setSearchQuery(velthuisEnabled ? convertVelthuisToPali(raw) : raw);
+              }}
+              placeholder="搜索巴利词头(支持无音标如 panna/sangha，或 aa→ā, .m→ṃ)、中文或词根..."
+              className="w-full rounded-2xl bg-white border border-[#E2E8E5] pl-10 pr-9 py-2.5 text-sm text-[#141D1B] placeholder:text-[#8C9894] focus:outline-none focus:border-[#1E625E]"
             />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#7A8783] hover:text-[#141D1B] cursor-pointer"
+                aria-label="清空搜索"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
           </div>
+
+          {/* Quick-insert Pāli Diacritic Chips + Velthuis Toggle */}
+          <div className="flex items-center justify-between gap-2 flex-wrap bg-white/80 rounded-xl px-3 py-1.5 border border-[#E6EBE8]">
+            <div className="flex items-center gap-1 flex-wrap">
+              <span className="text-[11px] text-[#64706D] mr-1">巴利音标输入：</span>
+              {PALI_DIACRITIC_CHARS.map((ch) => (
+                <button
+                  key={ch}
+                  type="button"
+                  onClick={() => setSearchQuery((prev) => prev + ch)}
+                  className="w-6 h-6 rounded-lg bg-[#F5F6F4] hover:bg-[#EBF3F1] text-xs font-pali font-semibold text-[#141D1B] hover:text-[#1E625E] flex items-center justify-center transition-colors cursor-pointer"
+                >
+                  {ch}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => setVelthuisEnabled((prev) => !prev)}
+              className={`text-[11px] px-2 py-0.5 rounded-md font-medium transition-colors cursor-pointer ${
+                velthuisEnabled
+                  ? 'bg-[#EBF3F1] text-[#1E625E]'
+                  : 'bg-[#F5F6F4] text-[#64706D]'
+              }`}
+              title="开启后输入 aa 自动转 ā，.m 转 ṃ，~n 转 ñ，.t 转 ṭ"
+            >
+              {velthuisEnabled ? 'Velthuis 转写: 开 (aa→ā)' : 'Velthuis 转写: 关'}
+            </button>
+          </div>
+
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
             {(
               [
@@ -413,13 +514,25 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => setAutoSpeakOnFlip((prev) => !prev)}
+            className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors cursor-pointer ${
+              autoSpeakOnFlip
+                ? 'bg-[#EBF3F1] text-[#1E625E]'
+                : 'bg-[#EEF2F0] text-[#64706D]'
+            }`}
+            title="翻转词卡时自动朗读巴利语发音"
+          >
+            {autoSpeakOnFlip ? '翻转朗读: 开' : '翻转朗读: 关'}
+          </button>
           <button
             type="button"
             onClick={() => setMode('browse')}
             className="text-xs font-semibold text-[#1E625E] hover:underline whitespace-nowrap cursor-pointer"
           >
-            全部词库 ({totalDictCount}词)
+            词库 ({totalDictCount}词)
           </button>
           <span className="font-mono-num text-base font-semibold text-[#52605C]">
             {safeIndex + 1} / {reviewQueue.length}
@@ -472,13 +585,13 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
           {!isFlipped ? (
             /* FRONT SIDE (正面：只有巴利单词与发音喇叭，点击卡片翻转) */
             <div
-              onClick={() => setIsFlipped(true)}
+              onClick={handleFlipToBack}
               role="button"
               tabIndex={0}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault();
-                  setIsFlipped(true);
+                  handleFlipToBack();
                 }
               }}
               className="mt-4 rounded-3xl bg-white px-6 py-16 sm:px-8 sm:py-20 shadow-2xs border border-[#E8ECEA] min-h-[420px] flex flex-col items-center justify-between cursor-pointer hover:border-[#C2D6D2] transition-all select-none"
@@ -618,7 +731,7 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
             <div className="mt-5">
               <button
                 type="button"
-                onClick={() => setIsFlipped(true)}
+                onClick={handleFlipToBack}
                 className="w-full rounded-2xl bg-[#1E625E] py-4 px-6 text-base font-bold text-white shadow-xs hover:bg-[#174E4A] active:scale-[0.99] transition-all cursor-pointer"
               >
                 显示答案（翻转词卡）
@@ -664,22 +777,28 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
             </div>
           )}
 
-          {/* Quick Card Selector Dots */}
-          <div className="mt-4 flex items-center justify-center gap-1.5">
-            {reviewQueue.map((c, idx) => (
-              <button
-                key={c.lemma}
-                type="button"
-                onClick={() => {
-                  setCurrentIndex(idx);
-                  setIsFlipped(false);
-                }}
-                aria-label={`切换到第 ${idx + 1} 张词卡`}
-                className={`h-2 rounded-full transition-all cursor-pointer ${
-                  idx === safeIndex ? 'w-6 bg-[#1E625E]' : 'w-2 bg-[#CBD6D2] hover:bg-[#9EB0AA]'
-                }`}
-              />
-            ))}
+          {/* Quick Card Selector Dots & Subtle Keyboard Shortcut Hint */}
+          <div className="mt-4 flex flex-col items-center gap-2">
+            <div className="flex items-center justify-center gap-1.5">
+              {reviewQueue.map((c, idx) => (
+                <button
+                  key={c.lemma}
+                  type="button"
+                  onClick={() => {
+                    setCurrentIndex(idx);
+                    setIsFlipped(false);
+                  }}
+                  aria-label={`切换到第 ${idx + 1} 张词卡`}
+                  className={`h-2 rounded-full transition-all cursor-pointer ${
+                    idx === safeIndex ? 'w-6 bg-[#1E625E]' : 'w-2 bg-[#CBD6D2] hover:bg-[#9EB0AA]'
+                  }`}
+                />
+              ))}
+            </div>
+            <div className="hidden sm:inline-flex items-center gap-1.5 text-[11px] text-[#7A8783]">
+              <Keyboard className="w-3.5 h-3.5" />
+              <span>快捷键：空格/回车 翻转词卡 · 数字键 1–4 评分 · V 键播放发音</span>
+            </div>
           </div>
         </>
       )}

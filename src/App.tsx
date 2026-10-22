@@ -20,12 +20,20 @@ import {
   type DpdWordEntry,
 } from './data/paliData';
 import {
+  checkBrowserPersistentStorage,
   db,
   ensureSeededDatabase,
+  exportBackupJsonFile,
+  getSavedSnapshots,
+  importBackupJsonText,
+  performSaveSnapshot,
+  requestBrowserPersistentStorage,
   resetToZeroProgress,
+  restoreFromSnapshotId,
   restoreSampleProgress,
   type FlashcardRecord,
   type GrammarAttemptRecord,
+  type SavedSnapshotItem,
 } from './db/database';
 import { stopPaliAudio, subscribeAudioStatus } from './utils/paliAudio';
 
@@ -50,6 +58,13 @@ export function App() {
     readingDone: false,
   });
 
+  // Phase 3: Auto-Save & Manual Save State
+  const [autoSaveEnabled, setAutoSaveEnabled] = useState<boolean>(true);
+  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
+  const [lastSaveType, setLastSaveType] = useState<'auto' | 'manual'>('auto');
+  const [savedSnapshots, setSavedSnapshots] = useState<SavedSnapshotItem[]>([]);
+  const [isStoragePersisted, setIsStoragePersisted] = useState<boolean>(false);
+
   // Independent Sutta Reader ID (经文阅读独立于课程，默认按原典顺序从 Dhp 1 开始自由阅读)
   const [independentSuttaId, setIndependentSuttaId] = useState<string>('dhp-1');
   const [autoPlayAudioOnReader, setAutoPlayAudioOnReader] = useState<boolean>(false);
@@ -68,7 +83,7 @@ export function App() {
     });
   }, []);
 
-  const loadAllFromIndexedDB = useCallback(async () => {
+  const loadAllFromIndexedDB = useCallback(async (triggerAutoSaveIfEnabled = false) => {
     await ensureSeededDatabase();
     const [allCards, allAttempts, metaRows] = await Promise.all([
       db.cards.toArray(),
@@ -88,6 +103,19 @@ export function App() {
     if (typeof metaMap.get('dailyCardLimit') === 'number') {
       setDailyCardLimit(metaMap.get('dailyCardLimit') as number);
     }
+    const isAutoSaveOn =
+      typeof metaMap.get('autoSaveEnabled') === 'boolean'
+        ? (metaMap.get('autoSaveEnabled') as boolean)
+        : true;
+    setAutoSaveEnabled(isAutoSaveOn);
+
+    if (typeof metaMap.get('lastSavedAt') === 'number') {
+      setLastSavedAt(metaMap.get('lastSavedAt') as number);
+    }
+    if (metaMap.get('lastSaveType') === 'manual' || metaMap.get('lastSaveType') === 'auto') {
+      setLastSaveType(metaMap.get('lastSaveType') as 'auto' | 'manual');
+    }
+
     if (typeof metaMap.get('selectedCourseId') === 'string') {
       const savedCourseId = metaMap.get('selectedCourseId') as string;
       setSelectedCourseId(savedCourseId);
@@ -102,12 +130,27 @@ export function App() {
       audioDone: Boolean(metaMap.get('task_audio_done') ?? false),
       readingDone: Boolean(metaMap.get('task_reading_done') ?? false),
     });
+
+    if (triggerAutoSaveIfEnabled && isAutoSaveOn) {
+      const snap = await performSaveSnapshot('auto', '学习进度自动同步');
+      setLastSavedAt(snap.timestamp);
+      setLastSaveType('auto');
+    }
+    setSavedSnapshots(getSavedSnapshots());
   }, []);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       await ensureSeededDatabase();
+      const persisted = await checkBrowserPersistentStorage();
+      if (!persisted) {
+        const req = await requestBrowserPersistentStorage();
+        if (!cancelled) setIsStoragePersisted(req.persisted);
+      } else if (!cancelled) {
+        setIsStoragePersisted(true);
+      }
+
       const [allCards, allAttempts, metaRows] = await Promise.all([
         db.cards.toArray(),
         db.grammarAttempts.toArray(),
@@ -127,6 +170,20 @@ export function App() {
       if (typeof metaMap.get('dailyCardLimit') === 'number') {
         setDailyCardLimit(metaMap.get('dailyCardLimit') as number);
       }
+      const isAutoSaveOn =
+        typeof metaMap.get('autoSaveEnabled') === 'boolean'
+          ? (metaMap.get('autoSaveEnabled') as boolean)
+          : true;
+      setAutoSaveEnabled(isAutoSaveOn);
+      if (typeof metaMap.get('lastSavedAt') === 'number') {
+        setLastSavedAt(metaMap.get('lastSavedAt') as number);
+      } else {
+        setLastSavedAt(Date.now());
+      }
+      if (metaMap.get('lastSaveType') === 'manual' || metaMap.get('lastSaveType') === 'auto') {
+        setLastSaveType(metaMap.get('lastSaveType') as 'auto' | 'manual');
+      }
+
       if (typeof metaMap.get('selectedCourseId') === 'string') {
         const savedCourseId = metaMap.get('selectedCourseId') as string;
         setSelectedCourseId(savedCourseId);
@@ -141,11 +198,67 @@ export function App() {
         audioDone: Boolean(metaMap.get('task_audio_done') ?? false),
         readingDone: Boolean(metaMap.get('task_reading_done') ?? false),
       });
+      setSavedSnapshots(getSavedSnapshots());
     })();
     return () => {
       cancelled = true;
     };
   }, []);
+
+  // Also auto-save when visibility changes (e.g., user switches app / locks phone screen)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden' && autoSaveEnabled) {
+        void performSaveSnapshot('auto', '切出页面自动备份').then((snap) => {
+          setLastSavedAt(snap.timestamp);
+          setLastSaveType('auto');
+          setSavedSnapshots(getSavedSnapshots());
+        });
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [autoSaveEnabled]);
+
+  const handleToggleAutoSave = async (enabled: boolean) => {
+    await db.meta.put({ key: 'autoSaveEnabled', value: enabled });
+    setAutoSaveEnabled(enabled);
+    if (enabled) {
+      const snap = await performSaveSnapshot('auto', '开启自动保存');
+      setLastSavedAt(snap.timestamp);
+      setLastSaveType('auto');
+      setSavedSnapshots(getSavedSnapshots());
+    }
+  };
+
+  const handleManualSave = async (customLabel?: string) => {
+    const snap = await performSaveSnapshot('manual', customLabel ?? '手动保存存档');
+    setLastSavedAt(snap.timestamp);
+    setLastSaveType('manual');
+    setSavedSnapshots(getSavedSnapshots());
+  };
+
+  const handleRestoreSnapshot = async (snapshotId: string) => {
+    await restoreFromSnapshotId(snapshotId);
+    await loadAllFromIndexedDB(false);
+  };
+
+  const handleExportBackupFile = async (): Promise<string> => {
+    const fileName = await exportBackupJsonFile();
+    await loadAllFromIndexedDB(false);
+    return fileName;
+  };
+
+  const handleImportBackupFile = async (jsonText: string) => {
+    await importBackupJsonText(jsonText);
+    await loadAllFromIndexedDB(false);
+  };
+
+  const handleRequestPersistStorage = async (): Promise<boolean> => {
+    const res = await requestBrowserPersistentStorage();
+    setIsStoragePersisted(res.persisted);
+    return res.persisted;
+  };
 
   // Selecting a progressive course updates the course & grammar topic, without locking the independent Sutta Reader
   const handleSelectCourse = async (courseId: string) => {
@@ -153,13 +266,13 @@ export function App() {
     await db.meta.put({ key: 'selectedCourseId', value: course.id });
     setSelectedCourseId(course.id);
     setSelectedGrammarTopicId(course.grammarTopicId);
-    await loadAllFromIndexedDB();
+    await loadAllFromIndexedDB(true);
   };
 
   const handleChangeDailyCardLimit = async (limit: number) => {
     await db.meta.put({ key: 'dailyCardLimit', value: limit });
     setDailyCardLimit(limit);
-    await loadAllFromIndexedDB();
+    await loadAllFromIndexedDB(true);
   };
 
   const handleResetToZero = async () => {
@@ -167,13 +280,13 @@ export function App() {
     await resetToZeroProgress(dailyCardLimit);
     setSelectedCourseId('course-1');
     setSelectedGrammarTopicId('grammar-lv1-basics');
-    await loadAllFromIndexedDB();
+    await loadAllFromIndexedDB(false);
   };
 
   const handleRestoreSample = async () => {
     stopPaliAudio();
     await restoreSampleProgress();
-    await loadAllFromIndexedDB();
+    await loadAllFromIndexedDB(false);
   };
 
   const handleToggleTaskDone = async (
@@ -188,14 +301,14 @@ export function App() {
             ? taskStatus.audioDone
             : taskStatus.readingDone;
     await db.meta.put({ key, value: !currentVal });
-    await loadAllFromIndexedDB();
+    await loadAllFromIndexedDB(true);
   };
 
   const handleMarkTaskCompleted = async (
     key: 'task_cards_done' | 'task_grammar_done' | 'task_audio_done' | 'task_reading_done'
   ) => {
     await db.meta.put({ key, value: true });
-    await loadAllFromIndexedDB();
+    await loadAllFromIndexedDB(true);
   };
 
   const masteredCount = useMemo(() => {
@@ -254,6 +367,17 @@ export function App() {
             onSelectCourse={handleSelectCourse}
             onResetToZero={handleResetToZero}
             onRestoreSample={handleRestoreSample}
+            autoSaveEnabled={autoSaveEnabled}
+            lastSavedAt={lastSavedAt}
+            lastSaveType={lastSaveType}
+            savedSnapshots={savedSnapshots}
+            isStoragePersisted={isStoragePersisted}
+            onToggleAutoSave={handleToggleAutoSave}
+            onManualSave={handleManualSave}
+            onRestoreSnapshot={handleRestoreSnapshot}
+            onExportBackupFile={handleExportBackupFile}
+            onImportBackupFile={handleImportBackupFile}
+            onRequestPersistStorage={handleRequestPersistStorage}
             taskStatus={taskStatus}
             onToggleTaskDone={handleToggleTaskDone}
             onStartFlashcardReview={() => handleSwitchTab('cards')}
@@ -280,7 +404,7 @@ export function App() {
             selectedCourseId={selectedCourseId}
             dailyCardLimit={dailyCardLimit}
             onChangeDailyCardLimit={handleChangeDailyCardLimit}
-            onCardsUpdated={loadAllFromIndexedDB}
+            onCardsUpdated={() => loadAllFromIndexedDB(true)}
             onMarkCardsDone={() => handleMarkTaskCompleted('task_cards_done')}
             onCloseReviewToToday={() => handleSwitchTab('today')}
             onOpenInflection={handleOpenInflection}
@@ -292,7 +416,7 @@ export function App() {
             attempts={grammarAttempts}
             selectedTopicId={selectedGrammarTopicId}
             onSelectTopicId={setSelectedGrammarTopicId}
-            onAttemptsUpdated={loadAllFromIndexedDB}
+            onAttemptsUpdated={() => loadAllFromIndexedDB(true)}
             onMarkGrammarDone={() => handleMarkTaskCompleted('task_grammar_done')}
             onOpenInflection={handleOpenInflection}
           />
@@ -303,7 +427,7 @@ export function App() {
             cards={cards}
             selectedSuttaId={independentSuttaId}
             onSelectSuttaId={setIndependentSuttaId}
-            onCardsUpdated={loadAllFromIndexedDB}
+            onCardsUpdated={() => loadAllFromIndexedDB(true)}
             onOpenInflection={handleOpenInflection}
             onMarkTaskCompleted={handleMarkTaskCompleted}
             autoPlayOnMount={autoPlayAudioOnReader}
