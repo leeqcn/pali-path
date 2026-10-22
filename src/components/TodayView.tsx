@@ -822,25 +822,39 @@ export const TodayView: React.FC<TodayViewProps> = ({
               {/* ==================== TAB 2: 学习说明 (使用方法 · 注意事项 · 预期学习结果) ==================== */}
               {drawerTab === 'guide' && (
                 <div className="space-y-4">
-                  {/* Section 1: 使用方法 */}
+                  {/* Section 1: 使用方法 & 词卡记忆曲线说明 */}
                   <div className="rounded-2xl bg-[#F2F5F2] border border-[#DFEAE4] p-4 space-y-3">
                     <div className="flex items-center gap-2">
                       <span className="w-6 h-6 rounded-lg bg-[#25635E] text-white flex items-center justify-center text-xs font-bold">
                         1
                       </span>
                       <h4 className="text-sm font-bold text-[#1E2A27]">
-                        使用方法（每日四步微闭环 + 自由点读）
+                        使用方法（如何背单词、切换下一词与四步闭环）
                       </h4>
                     </div>
 
-                    <div className="space-y-2 text-xs text-[#384642] leading-relaxed">
-                      <p>
-                        <strong className="text-[#1E2A27]">① 词卡复习（正面回忆 · 反面拆解）：</strong>
-                        正面仅显示巴利语原词，先尝试回忆词义与发音，再点击翻转查看中文/英文释义、DPD 词根拆解与经典例句。根据记忆程度点击「重来 / 困难 / 记得 / 轻松」，系统会自动计算下次复习间隔。
-                      </p>
+                    <div className="space-y-2.5 text-xs text-[#384642] leading-relaxed">
+                      <div className="rounded-xl bg-[#FAFBF9] p-3 border border-[#DFEAE4] space-y-1.5">
+                        <div className="font-bold text-[#1E2A27]">
+                          ① 如何学单词与进入下一词（SM-2 / FSRS 混合记忆曲线算法）：
+                        </div>
+                        <p>
+                          • <strong>第 1 步（看正面回想）：</strong>正面仅显示巴利语原词与发音按钮，先在心里回想词义，然后<strong>点击卡片任意位置</strong>（或点下方「显示答案」）翻到背面。
+                        </p>
+                        <p>
+                          • <strong>第 2 步（点四档评分 → 自动进入下一词）：</strong>看完背面释义、词根拆解与例句后，直接点击底部的 <strong>「重来 / 困难 / 记得 / 轻松」</strong> 任一按钮，系统即<strong>自动进入下一个单词</strong>（也可点右上角 <code>&lt; &gt;</code> 箭头或按键盘空格/方向键切换）。
+                        </p>
+                        <p>
+                          • <strong>「重来」当轮循环强化：</strong>如果您点了<strong>「重来」</strong>，该词会自动排入<strong>本组队列末尾重复出现</strong>，直到您真正记住并选择了「困难 / 记得 / 轻松」才会结束本轮。
+                        </p>
+                        <p>
+                          • <strong>1 / 3 / 7 天后到期自动复习：</strong>选了「困难 (1天)」「记得 (3天)」「轻松 (7天)」的词，系统会按 <strong>SM-2 / FSRS 间隔重复算法</strong>记录到期时间与难度因子（Ease Factor，初始 2.5）。当 1 / 3 / 7 天到期后，这些旧词会<strong>自动排在当天新词之后出现</strong>供您复习；连续记住后间隔会按指数级拉长（如 <code>3天 → 8天 → 20天 → 50天</code>）。
+                        </p>
+                      </div>
+
                       <p>
                         <strong className="text-[#1E2A27]">② 语法学习（阶梯精讲 · 随堂测验）：</strong>
-                        每课聚焦 1 个核心语法点（配完整变格/变位对照表与 4 道经文实题）。做错的题目会自动收入「只看错题」方便考前强化。
+                        每课聚焦 1 个核心语法点（配完整变格/变位对照表与 4 道经文实题）。做错的题目会自动收入「只看错题」方便针对性强化。
                       </p>
                       <p>
                         <strong className="text-[#1E2A27]">③ 听音与跟读（音拍节律 · 录音对比）：</strong>

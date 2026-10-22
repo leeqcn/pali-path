@@ -3292,25 +3292,39 @@ export const GRAMMAR_TOPICS: GrammarTopic[] = [
     number: '01',
     titleZh: '发音、语序与最简归依句型',
     titlePali: 'Lv.1 入门 · 主语 + 业格 (-aṃ) + 动词 (-āmi/-ti)',
-    summary: '从零开始认识巴利语长短元音、空点鼻音 (ṃ) 与基本“主-宾-谓 (SOV)”语序，用 5 个基础词读懂《三归依》。',
+    summary: '从零开始认识巴利语基本“主-宾-谓 (SOV)”语序、业格词尾 (-aṃ)、第一与第三人称动词词尾 (-āmi / -ti) 以及礼敬与三归依核心词汇。',
     readingMinutes: 6,
     sections: [
       {
-        heading: '1. 巴利语最基础的句子语序（主语 + 宾语 + 动词）',
-        body: '与中文“我归依佛（主-谓-宾）”不同，巴利语标准语序将动词放在句末（主-宾-谓）。而且由于动词词尾已经包含了人称（例如 -āmi 代表“我”），主语代词 ahaṃ（我）经常可以省略。',
+        heading: '1. 巴利语最基础的句子语序（主语 + 宾语 + 动词）与人称词尾 (-āmi / -ti)',
+        body: '与中文“我归依佛（主-谓-宾）”不同，巴利语标准语序将动词放在句末（主-宾-谓 SOV）。\n• 业格单数词尾 -aṃ（或 -ṃ）：加在名词后，表示动作指向的目标或直接宾语（如 Buddhaṃ 向着佛、Dhammaṃ 向着法、Saṅghaṃ 向着僧、saraṇaṃ 作为归依处）。\n• 现在时动词的两个核心单数词尾：\n  ① -āmi（第一人称单数“我……”）：如 gacchāmi（我前往/我归依）。因为词尾 -āmi 已经明确包含“我”，主语代词 ahaṃ（我）通常直接省略。\n  ② -ti（第三人称单数“他/她……”）：如 gacchati（他前往/他归依），这也是巴利语词典收录动词的标准原形。',
         table: {
           headers: ['句子成分', '巴利原词', '词尾标志', '语法作用', '中文直译'],
           rows: [
-            ['隐含主语 (Nom.)', '(Ahaṃ)', '-aṃ', '第一人称单数主语', '（我）'],
-            ['目标宾语 (Acc.)', 'Buddhaṃ / Dhammaṃ / Saṅghaṃ', '-aṃ', '业格单数：动作指向的对象', '向着佛陀 / 法 / 僧伽'],
-            ['同位补足宾语 (Acc.)', 'saraṇaṃ', '-aṃ', '业格单数：作为归依处', '作为庇护所/归依处'],
-            ['句末谓语动词', 'gacchāmi', '-āmi', '现在时第一人称单数', '我前往 / 我归向'],
+            ['隐含主语 (Nom.)', '(Ahaṃ)', '-aṃ', '第一人称单数主语（常省略）', '（我）'],
+            ['目标宾语 (Acc.)', 'Buddhaṃ / Dhammaṃ / Saṅghaṃ', '-aṃ (-ṃ)', '业格单数：动作指向的对象', '向着佛陀 / 法 / 僧伽'],
+            ['同位补足宾语 (Acc.)', 'saraṇaṃ', '-aṃ (-ṃ)', '业格单数：作为归依处', '作为庇护所/归依处'],
+            ['句末动词（第一人称）', 'gacchāmi', '-āmi', '现在时第一人称单数（我……）', '我前往 / 我归向'],
+            ['句末动词（第三人称）', 'gacchati', '-ti', '现在时第三人称单数（他……）', '他前往 / 他归向'],
           ],
         },
       },
       {
-        heading: '2. 礼敬句型：Namo + 为格 (-ssa / -to)',
-        body: '巴利圣典开篇必诵的“Namo tassa bhagavato arahato sammāsambuddhassa”中，namo（礼敬）永远搭配“为格 (Dative，词尾为 -ssa 或 -to)”，表示“向……致敬”。',
+        heading: '2. 礼敬句型：Namo + 为格单数 (-ssa / -to)',
+        body: '巴利圣典开篇必诵的礼敬文“Namo tassa bhagavato arahato sammāsambuddhassa”（礼敬彼世尊、阿罗汉、正等正觉者）中：\n• namo 意为“礼敬、致敬”，在语法上永远搭配“为格单数 (Dative singular)”，表示“向……致敬”。\n• 为格单数有两种最常见的词尾标志：-ssa（如 tassa 向那位、sammāsambuddhassa 向正等正觉者）与 -to（如 bhagavato 向世尊、arahato 向阿罗汉）。',
+        table: {
+          headers: ['礼敬文词汇', '词尾标志', '格位功能', '中文释义'],
+          rows: [
+            ['Namo', '不变化礼敬词', '核心谓语/感叹词', '礼敬、顶礼、致敬'],
+            ['tassa', '-ssa', '指示代词 · 为格单数', '向彼、向那位'],
+            ['bhagavato / arahato', '-to', '辅音词干 · 为格单数', '向世尊 / 向阿罗汉'],
+            ['sammāsambuddhassa', '-ssa', '-a 词干 · 为格单数', '向正等正觉者（佛陀）'],
+          ],
+        },
+      },
+      {
+        heading: '3. 三归依重复副词（Dutiyampi / Tatiyampi）与基础小词（na / ca）',
+        body: '• Dutiyampi（第二次也）与 Tatiyampi（第三次也）：由序数副词 dutiyaṃ（第二次）/ tatiyaṃ（第三次）加上附着小词 pi（也、亦）合成。词尾鼻音 ṃ 遇到唇音 p 时，自然变为同部位唇鼻音 m（dutiyaṃ + pi → dutiyampi）。\n• 否定词 na 与并列连词 ca 的位置区别：na（不、非）总是放在被否定词的【前面】（前置词，如 na sammati 不止息）；而 ca（和、与）与 vā（或）属于【后置连词】，常放在所连接词的【后面】（如 A ca B ca）。',
       },
     ],
     exercises: [
@@ -3325,39 +3339,39 @@ export const GRAMMAR_TOPICS: GrammarTopic[] = [
       },
       {
         id: 'lv1-2',
-        prompt: '在“Buddhaṃ saraṇaṃ gacchāmi”中，Buddhaṃ 和 saraṇaṃ 词尾的 -ṃ 表示什么格位？',
+        prompt: '在“Buddhaṃ saraṇaṃ gacchāmi”中，Buddhaṃ 和 saraṇaṃ 词尾的 -ṃ（-aṃ）表示什么格位？',
         paliFocus: 'Buddhaṃ saraṇaṃ',
         options: ['业格单数（表示动作指向的目标/宾语）', '主格复数', '从格单数（从……离开）', '处格复数'],
         correctIndex: 0,
-        explanation: '-a 词干名词加上 -ṃ 构成业格单数（Accusative singular），搭配移动动词 gacchati 表示前往的目标。',
+        explanation: '-a 词干名词加上 -ṃ 构成业格单数（Accusative singular），搭配移动动词 gacchāmi / gacchati 表示前往与归向的目标。',
         relatedLemma: 'buddha',
       },
       {
         id: 'lv1-3',
         prompt: '如果要把“我归依佛 (Buddhaṃ saraṇaṃ gacchāmi)”改成“他归依佛”，句末动词应改为：',
-        paliFocus: 'gacchāmi → 3rd sg.',
+        paliFocus: 'gacchāmi (-āmi) → 3rd sg. (-ti)',
         options: ['gacchati', 'gacchāma', 'gacchasi', 'gacchanti'],
         correctIndex: 0,
-        explanation: '现在时第三人称单数（他/她）词尾为 -ti，因此“他前往/他归依”是 gacchati。',
+        explanation: '第一节表中所学：现在时第一人称单数（我）词尾为 -āmi（gacchāmi），第三人称单数（他）词尾为 -ti（gacchati）。',
         relatedLemma: 'gacchati',
       },
       {
         id: 'lv1-4',
-        prompt: '巴利语否定词“na”（不、非）与并列连词“ca”（和、与）在句中的位置有何区别？',
-        paliFocus: 'na / ca',
-        options: ['na 放在被否定词之前，ca 常放在所连接词之后（后置词）', '两者都只能放在句末', '两者都只能放在句首', 'ca 表示否定，na 表示并列'],
+        prompt: '礼敬文“Namo tassa bhagavato arahato sammāsambuddhassa”中，与 Namo 搭配的词尾 -ssa 和 -to 是什么格位？',
+        paliFocus: 'tassa / bhagavato / sammāsambuddhassa',
+        options: ['为格单数（表示“向……致敬”）', '主格复数', '具格复数', '从格单数'],
         correctIndex: 0,
-        explanation: 'na 是前置否定词（如 na sammati 不止息）；ca 与 vā 是后置连词（如 A ca B ca）。',
-        relatedLemma: 'ca',
+        explanation: '第二节所学：namo（礼敬）永远搭配为格单数（Dative singular），其常见词尾为 -ssa（tassa, sammāsambuddhassa）与 -to（bhagavato, arahato）。',
+        relatedLemma: 'buddha',
       },
       {
         id: 'lv1-5',
-        prompt: '“Cittassa damatho sādhu”中，句末的“sādhu”是什么意思？',
-        paliFocus: 'sādhu',
-        options: ['善哉、美好、有益的', '痛苦的', '困难的', '迅速的'],
+        prompt: '三归依中“Dutiyampi”（第二次也）与否定词“na”、连词“ca”的语法规则，下列哪项正确？',
+        paliFocus: 'Dutiyampi (dutiyaṃ + pi) · na / ca',
+        options: ['Dutiyampi 由 dutiyaṃ + pi（也）合成；na 置于被否定词前，ca 置于所连接词后', 'pi 意为“不”，na 意为“也”', 'na 与 ca 都只能放在句末', 'Dutiyampi 是动词过去时'],
         correctIndex: 0,
-        explanation: 'sādhu 是巴利语最常用的赞叹与表语词，意为“善、好、善哉”。',
-        relatedLemma: 'sādhu',
+        explanation: '第三节所学：dutiyaṃ（第二次）+ pi（也）→ dutiyampi；否定词 na 放在被否定词前，连词 ca 则是后置词。',
+        relatedLemma: 'saraṇa',
       },
     ],
   },
@@ -3366,22 +3380,22 @@ export const GRAMMAR_TOPICS: GrammarTopic[] = [
     number: '02',
     titleZh: '阳性与中性 -a 词干单复数变格',
     titlePali: 'Lv.2 基础 · Nāma-vibhatti (-o / -ā / -aṃ / -e)',
-    summary: '掌握巴利语占比超过 60% 的阳性（dhamma, satta, loka）与中性（sukha, dukkha, kamma）-a 词干单复数变化。',
+    summary: '掌握巴利语占比超过 60% 的阳性（dhamma, satta, loka, magga）与中性（sukha, dukkha, kamma）-a 词干单复数变化。',
     readingMinutes: 8,
     sections: [
       {
         heading: '1. 阳性与中性 -a 词干的八格对比 (Aṭṭha Vibhattiyo)',
-        body: '阳性 -a 词干（如 dhamma 法、satta 众生、loka 世间）与中性 -a 词干（如 dukkha 苦、sukha 乐、kamma 业）绝大多数格位完全相同，唯独“主格、业格、呼格”的单复数词尾不同：',
+        body: '阳性 -a 词干（如 dhamma 法、satta 众生、loka 世间、magga 道）与中性 -a 词干（如 dukkha 苦、sukha 乐、kamma 业）绝大多数格位完全相同，唯独“主格、业格、呼格”的单复数词尾不同：\n• 阳性主格单数为 -o（如 dhammo 法、maggo 道），阳性主格复数为 -ā（如 dhammā 诸法、sattā 诸有情）。\n• 中性主格单数与业格单数同形，皆为 -aṃ（如 dukkhaṃ 苦、sukhaṃ 乐）。\n• 处格单数（在……中）有三种常见词尾：-e、-mhi 或 -smiṃ（如 loke / lokasmiṃ 在世间中）。',
         table: {
           headers: ['格位', '巴利名称', '核心语法功能', 'dhamma (阳) 单/复', 'dukkha (中) 单/复'],
           rows: [
-            ['1. 主格 (Nom.)', 'Paṭhamā', '句子主语、表语', 'dhammo / dhammā', 'dukkhaṃ / dukkhāni (或 dukkhā)'],
+            ['1. 主格 (Nom.)', 'Paṭhamā', '句子主语、表语', 'dhammo (maggo) / dhammā (sattā)', 'dukkhaṃ (sukhaṃ) / dukkhāni'],
             ['2. 业格 (Acc.)', 'Dutiyā', '直接宾语、动作终点', 'dhammaṃ / dhamme', 'dukkhaṃ / dukkhāni'],
             ['3. 具格 (Ins.)', 'Tatiyā', '工具、方式（以……）', 'dhammena / dhammehi', 'dukkhena / dukkhehi'],
             ['4. 为格 (Dat.)', 'Catutthī', '间接宾语、目的', 'dhammassa / dhammānaṃ', 'dukkhassa / dukkhānaṃ'],
             ['5. 从格 (Abl.)', 'Pañcamī', '来源、原因（从……）', 'dhammā / dhammehi', 'dukkhā / dukkhehi'],
             ['6. 属格 (Gen.)', 'Chaṭṭhī', '所属关系（……的）', 'dhammassa / dhammānaṃ', 'dukkhassa / dukkhānaṃ'],
-            ['7. 处格 (Loc.)', 'Sattamī', '时间、处所（在……中）', 'dhamme (或 -smiṃ) / dhammesu', 'dukkhe / dukkhesu'],
+            ['7. 处格 (Loc.)', 'Sattamī', '时间、处所（在……中）', 'dhamme 或 -smiṃ (lokasmiṃ) / dhammesu', 'dukkhe / dukkhesu'],
             ['8. 呼格 (Voc.)', 'Ālapana', '称呼、呼唤对象', 'dhamma / dhammā', 'dukkha / dukkhāni'],
           ],
         },
@@ -3444,16 +3458,16 @@ export const GRAMMAR_TOPICS: GrammarTopic[] = [
     number: '03',
     titleZh: '现在时动词变位与祈愿/愿求式',
     titlePali: 'Lv.3 初中级 · Ākhyāta (-ti / -nti / -antu / -eyya)',
-    summary: '理解巴利语五大高频动词（karoti, bhāsati, passati, suṇāti, dadāti）的现在时、命令祈愿式（bhavantu）与愿求式（bhāvaye）。',
+    summary: '理解巴利语高频核心动词（gacchati 去、karoti 造作、bhāsati 言说、passati 观见）的现在时、命令祈愿式（bhavantu）与愿求式（bhāvaye）。',
     readingMinutes: 7,
     sections: [
       {
         heading: '1. 现在时主动语态词尾 (Vattamānā)',
-        body: '巴利语现在时动词由“词根 (dhātu) + 词干中缀 (vikaraṇa) + 人称词尾 (vibhatti)”构成。经文中出现频率最高的是第三人称单数 (-ti)、复数 (-nti) 与第一人称单数 (-mi)。',
+        body: '巴利语现在时动词由“词根 (dhātu) + 词干中缀 (vikaraṇa) + 人称词尾 (vibhatti)”构成。经文中出现频率最高的是：\n• 第三人称单数 -ti（他……）：如 gacchati（去）、bhāsati（言说）、karoti（做/造作）、passati（看见/如实观见）。\n• 第三人称复数 -nti（他们……）：如 gacchanti、karonti、sammanti（止息）。\n• 第一人称单数 -mi（我……）：如 gacchāmi（我归向）、karomi（我做）。',
         table: {
-          headers: ['人称', '单数 (Ekavacana)', '复数 (Bahuvacana)', '例词：√gam (去)', '例词：√kar (做)'],
+          headers: ['人称', '单数 (Ekavacana)', '复数 (Bahuvacana)', '例词：√gam (去) / √pas (观见)', '例词：√kar (做) / √bhās (说)'],
           rows: [
-            ['第三人称 (他/他们)', '-ti', '-nti', 'gacchati / gacchanti', 'karoti / karonti'],
+            ['第三人称 (他/他们)', '-ti', '-nti', 'gacchati / passati (观见)', 'karoti (造作) / bhāsati (言说)'],
             ['第二人称 (你/你们)', '-si', '-tha', 'gacchasi / gacchatha', 'karosi / karotha'],
             ['第一人称 (我/我们)', '-mi (元音拉长)', '-ma (元音拉长)', 'gacchāmi / gacchāma', 'karomi / karoma'],
           ],
@@ -3461,7 +3475,7 @@ export const GRAMMAR_TOPICS: GrammarTopic[] = [
       },
       {
         heading: '2. 祈愿/命令式 (Pañcamī) 与 愿求式 (Sattamī)',
-        body: '• 命令/祈愿式第三人称复数 -antu：用于发愿，如《慈经》“Sabbe sattā bhavantu sukhitattā”（愿一切有情成为安乐者！）。\n• 愿求式（Optative）-e / -eyya：表示“应当、可以”，如《慈经》“mānasaṃ bhāvaye aparimāṇaṃ”（应当修习无量之心）。',
+        body: '• 命令/祈愿式第三人称复数 -antu：用于发愿，如《慈经》“Sabbe sattā bhavantu sukhitattā”（愿一切有情成为安乐者！）。\n• 愿求式（Optative）-e / -eyya：表示劝勉“应当、可以”，如《慈经》“mānasaṃ bhāvaye aparimāṇaṃ”（应当修习无量之心）。',
       },
     ],
     exercises: [
@@ -3496,7 +3510,7 @@ export const GRAMMAR_TOPICS: GrammarTopic[] = [
         id: 'vc-4',
         prompt: '《法句经》277 偈“Yadā paññāya passati”（当以慧观见时）中，passati 的词义与词尾是：',
         paliFocus: 'passati',
-        options: ['看见/观照 · 现在时第三人称单数', '听闻 · 过去时', '布施 · 第一人称单数', '止息 · 第三人称复数'],
+        options: ['看见/观照 · 现在时第三人称单数 (-ti)', '听闻 · 过去时', '布施 · 第一人称单数', '止息 · 第三人称复数'],
         correctIndex: 0,
         explanation: 'passati（词根 √dis/√pas）意为“看见、如实观照”，词尾 -ti 为现在时第三人称单数。',
         relatedLemma: 'passati',
@@ -3517,7 +3531,7 @@ export const GRAMMAR_TOPICS: GrammarTopic[] = [
     number: '04',
     titleZh: '具格、属格与阴性 -ā 词干变格',
     titlePali: 'Lv.4 中级 · 具格 (-ena/-āya) 与属格 (-ssa/-ānaṃ)',
-    summary: '深入理解经文中最常出现的“借由什么方式（具格）”与“属于谁（属格）”，掌握 paññā、mettā、pūjā 等阴性名词变格。',
+    summary: '深入理解经文中最常出现的“借由什么方式（具格）”与“属于谁（属格）”，掌握 paññā、mettā、pūjā 等阴性名词与特殊辅音词干变格。',
     readingMinutes: 8,
     sections: [
       {
@@ -3534,8 +3548,8 @@ export const GRAMMAR_TOPICS: GrammarTopic[] = [
         },
       },
       {
-        heading: '2. 古老辅音词干 manas（心/意）的具格与属格',
-        body: 'manas（心）在复合词首变为 mano-，但其单数具格保留古老词尾 -ā（manasā 以心），修饰它的形容词仍用标准 -ena（Manasā ce paduṭṭhena / pasannena）。',
+        heading: '2. 特殊辅音词干：manas（心）的具格与 vahant（拉车者）的属格',
+        body: '• manas（心/意）：属于 -as 辅音词干，单数具格保留古老词尾 -ā（manasā 以心），而修饰它的普通 -a 词干形容词仍用标准具格词尾 -ena（如 Manasā ce paduṭṭhena / pasannena：若以染污/清净之心）。形容词与名词只需在“性、数、格”一致，字面词尾拼写不必相同。\n• vahato（拉车牛的）：现在分词 vahant（拉车者）按辅音 -at 词干变格时，属格单数词尾为 -to（vahato，如 cakkaṃva vahato padaṃ：如车轮随于拉车牛的足迹）。',
       },
     ],
     exercises: [
@@ -3600,7 +3614,7 @@ export const GRAMMAR_TOPICS: GrammarTopic[] = [
     number: '05',
     titleZh: '过去被动分词 (-ta/-na) 与不定过去时',
     titlePali: 'Lv.5 中高级 · Kitaka & Ajjatanī (buddha, danta, akkocchi)',
-    summary: '掌握巴利语出镜率极高的过去分词（buddha, danta, paduṭṭha, pasanna）与带 a- 词头的不定过去时（akkocchi, avadhi）。',
+    summary: '掌握巴利语出镜率极高的过去分词（buddha, danta, paduṭṭha, pasanna）、带 a- 词头的不定过去时（akkocchi, avadhi）及名语句省略系动词规则。',
     readingMinutes: 8,
     sections: [
       {
@@ -3618,8 +3632,12 @@ export const GRAMMAR_TOPICS: GrammarTopic[] = [
         },
       },
       {
-        heading: '2. 不定过去时 (Aorist / Ajjatanī)',
-        body: '表示过去已经发生的行为，通常在动词词根前加过去时词头 a-（若词根以元音开头则拉长元音），词尾第三人称单数为 -i 或 -si。例如《法句经》第 3 偈：“Akkocchi maṃ avadhi maṃ, ajini maṃ ahāsi me”（他曾辱骂我、殴打我、击败我、抢夺我的东西）。',
+        heading: '2. 不定过去时 (Aorist) 与第一人称代词变格 (maṃ vs. me)',
+        body: '• 不定过去时：表示过去已发生的行为，常在词根前加 a-（或拉长首元音），第三人称单数词尾为 -i 或 -si。例如《法句经》第 3 偈：“Akkocchi maṃ avadhi maṃ, ajini maṃ ahāsi me”（他曾辱骂我、殴打我、击败我、抢夺我的东西）。\n• maṃ 与 me 的区别：第一人称代词 ahaṃ（我）的【业格单数】是 maṃ（作直接宾语：骂我、打我、胜我），而【属格/为格】附着形式是 me（表示所属：“我的”财物）。',
+      },
+      {
+        heading: '3. 名语句（主语 + 表语）省略系动词规则',
+        body: '在阐述普遍法印或格言时，如三法印“Sabbe saṅkhārā aniccā”（一切诸行皆无常）、“Sabbe dhammā anattā”（一切诸法皆无我），巴利语常省略现在时系动词 hoti / bhavanti（是），直接将主格主语与主格表语并置，语气更为庄重凝练。',
       },
     ],
     exercises: [
@@ -3688,13 +3706,13 @@ export const GRAMMAR_TOPICS: GrammarTopic[] = [
             ['元音省略与脱落', 'cakkaṃva / chāyāva', 'cakkaṃ + iva / chāyā + iva', 'iva（如同）省去句首元音 i 成为附着词 va'],
             ['元音长化融合', 'sammantīdha', 'sammanti + idha', '短元音 i + i 融合为长元音 ī'],
             ['ṃ 在颚音 c 前同化为 ñ', 'paṇḍitānañca / mettāñca', 'paṇḍitānaṃ + ca / mettaṃ + ca', '鼻音 ṃ 受颚音 c 影响同化为硬颚鼻音 ñ'],
-            ['manas 词干 o 化', 'manopubbaṅgama', 'manas + pubbaṅgama', '-as 在浊音前变为 -o'],
+            ['ṃ 在软腭音 g 前同化为 ṅ', 'manopubbaṅgama', 'manas + pubbaṃ + gama', '鼻音 ṃ 在软腭塞音 g 前同化为软腭鼻音 ṅ'],
           ],
         },
       },
       {
         heading: '2. 复合词：有财释 (Bahubbīhi) 与依主释 (Tappurisa)',
-        body: '《法句经》与《小诵》中大量使用复合词：\n• 有财释 (Bahubbīhi)：两个词合起来转化为形容词修饰外在主语，如 manopubbaṅgamā（以心为先导的[诸法]）、sukhitattā（怀有安乐之心的[众生]）。\n• 依主释 (Tappurisa)：前词限定后词（相当于“……的……”），如 amatapadaṃ（不死之道 = amata 之 pada）、sabbapāpassa（一切恶的）。',
+        body: '《法句经》与《小诵》中大量使用复合词：\n• 有财释 (Bahubbīhi)：两个词合起来转化为形容词修饰外在主语，如 manopubbaṅgamā（以心为先导的[诸法]）、sukhitattā（sukhita 安乐的 + attā 自心 → 怀有安乐之心的[众生]）。\n• 依主释 (Tappurisa)：前词限定后词（相当于“……的……”），如 amatapadaṃ（不死之道 = amata 之 pada）、sacittapariyodapanaṃ（sa 自己的 + citta 心 + pariyodapanaṃ 彻底净化 → 自净其意）。',
       },
     ],
     exercises: [

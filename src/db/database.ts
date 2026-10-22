@@ -79,6 +79,10 @@ export function getNextIntervalPreview(card: FlashcardRecord): Record<CardRating
   };
 }
 
+export function isCardDueNow(card: FlashcardRecord): boolean {
+  return Boolean(card.inDeck && card.repetitions > 0 && card.dueTimestamp <= Date.now());
+}
+
 export async function rateFlashcard(lemma: string, rating: CardRating): Promise<FlashcardRecord> {
   const now = Date.now();
   const existing = await db.cards.get(lemma);
