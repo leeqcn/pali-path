@@ -121,22 +121,43 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
   const totalBatches = Math.max(1, Math.ceil(fullOrderedCards.length / dailyCardLimit));
   const safeBatchIndex = Math.min(batchIndex, totalBatches - 1);
 
-  // Base batch of words for this session + any 1/3/7-day due review cards appended right after today's words
-  const baseBatchQueue = useMemo(() => {
-    const start = safeBatchIndex * dailyCardLimit;
-    const slice = fullOrderedCards.slice(start, start + dailyCardLimit);
-    const initialBatch = slice.length > 0 ? [...slice] : fullOrderedCards.slice(0, dailyCardLimit);
+  const [currentIndex, setCurrentIndex] = useState<number>(0);
+  const [sessionCompletedCount, setSessionCompletedCount] = useState(0);
+  const [showSessionSummary, setShowSessionSummary] = useState(false);
+  // Keep cards rated during the active session in their slot so rating a card never shifts queue indices mid-session
+  const [sessionReviewedLemmas, setSessionReviewedLemmas] = useState<string[]>([]);
 
-    // For Today's primary batch (batch 0), automatically append any previously learned cards (1/3/7 days ago) that are due now
+  // Base batch of words for this session: prioritizes unlearned words (repetitions === 0) of the active course + any 1/3/7-day due review cards
+  const baseBatchQueue = useMemo(() => {
+    if (fullOrderedCards.length === 0) return [];
+
     if (safeBatchIndex === 0) {
-      const dueReviewCards = fullOrderedCards.filter(
-        (c) => isCardDueNow(c) && !initialBatch.some((b) => b.lemma === c.lemma)
+      const unlearnedOrInSession = fullOrderedCards.filter(
+        (c) => c.repetitions === 0 || sessionReviewedLemmas.includes(c.lemma)
       );
-      return [...initialBatch, ...dueReviewCards];
+      const primarySlice =
+        unlearnedOrInSession.length >= dailyCardLimit
+          ? unlearnedOrInSession.slice(0, dailyCardLimit)
+          : [
+              ...unlearnedOrInSession,
+              ...fullOrderedCards
+                .filter((c) => !unlearnedOrInSession.some((u) => u.lemma === c.lemma))
+                .slice(0, dailyCardLimit - unlearnedOrInSession.length),
+            ];
+
+      // Append any 1/3/7-day due review cards right after today's new word batch
+      const dueReviewCards = fullOrderedCards.filter(
+        (c) =>
+          (isCardDueNow(c) || sessionReviewedLemmas.includes(c.lemma)) &&
+          !primarySlice.some((b) => b.lemma === c.lemma)
+      );
+      return [...primarySlice, ...dueReviewCards];
     }
 
-    return initialBatch;
-  }, [fullOrderedCards, safeBatchIndex, dailyCardLimit]);
+    const start = safeBatchIndex * dailyCardLimit;
+    const slice = fullOrderedCards.slice(start, start + dailyCardLimit);
+    return slice.length > 0 ? [...slice] : fullOrderedCards.slice(0, dailyCardLimit);
+  }, [fullOrderedCards, safeBatchIndex, dailyCardLimit, sessionReviewedLemmas]);
 
   // Complete session queue = baseBatchQueue + any cards rated "重来" (again) during this session
   const reviewQueue = useMemo(() => {
@@ -145,10 +166,6 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
       .filter((c): c is FlashcardRecord => Boolean(c));
     return [...baseBatchQueue, ...requeuedCards];
   }, [baseBatchQueue, againQueueLemmas, cards]);
-
-  const [currentIndex, setCurrentIndex] = useState<number>(0);
-  const [sessionCompletedCount, setSessionCompletedCount] = useState(0);
-  const [showSessionSummary, setShowSessionSummary] = useState(false);
 
   const safeIndex = Math.min(currentIndex, Math.max(0, reviewQueue.length - 1));
   const activeCard = reviewQueue[safeIndex] ?? reviewQueue[0];
@@ -191,6 +208,7 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
     const nextBatch = (safeBatchIndex + 1) % totalBatches;
     setBatchIndex(nextBatch);
     setAgainQueueLemmas([]);
+    setSessionReviewedLemmas([]);
     setCurrentIndex(0);
     setIsFlipped(false);
     setShowSessionSummary(false);
@@ -199,6 +217,9 @@ export const FlashcardsView: React.FC<FlashcardsViewProps> = ({
   const handleRate = useCallback(
     async (rating: CardRating) => {
       if (!activeCard) return;
+      setSessionReviewedLemmas((prev) =>
+        prev.includes(activeCard.lemma) ? prev : [...prev, activeCard.lemma]
+      );
       await rateFlashcard(activeCard.lemma, rating);
       await onCardsUpdated();
       setIsFlipped(false); // Reset to Front side for the next card

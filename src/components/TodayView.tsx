@@ -197,6 +197,16 @@ export const TodayView: React.FC<TodayViewProps> = ({
     setShowMenuDrawer(true);
   };
 
+  const currentCourseIdx = Math.max(
+    0,
+    CURRICULUM_COURSES.findIndex((c) => c.id === currentCourse.id)
+  );
+  const prevCourse = currentCourseIdx > 0 ? CURRICULUM_COURSES[currentCourseIdx - 1] : null;
+  const nextCourse =
+    currentCourseIdx + 1 < CURRICULUM_COURSES.length
+      ? CURRICULUM_COURSES[currentCourseIdx + 1]
+      : null;
+
   return (
     <div className="max-w-lg mx-auto px-5 pt-6 pb-28 flex flex-col min-h-[calc(100svh-4rem)]">
       {/* Header matching Reference Image 2 with a single collapsed menu button on the right */}
@@ -205,9 +215,34 @@ export const TodayView: React.FC<TodayViewProps> = ({
           <h1 className="text-[34px] sm:text-[36px] leading-tight font-bold text-[#1E2A27] tracking-tight">
             今日
           </h1>
-          <p className="mt-1 text-base text-[#5E6D69]">
-            {currentCourse.levelBadge} · {currentCourse.titleZh}
-          </p>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <p className="text-base font-medium text-[#4E5E5A]">
+              {currentCourse.levelBadge} · {currentCourse.titleZh}
+            </p>
+            <div className="inline-flex items-center gap-1 rounded-xl bg-[#E8F0ED] px-2 py-0.5 text-xs font-semibold text-[#25635E]">
+              {prevCourse && (
+                <button
+                  type="button"
+                  onClick={() => void onSelectCourse(prevCourse.id)}
+                  className="hover:underline px-1 cursor-pointer"
+                  title={`切换到上一课：${prevCourse.levelBadge}`}
+                >
+                  上一课
+                </button>
+              )}
+              {prevCourse && nextCourse && <span className="text-[#9AB0AA]">|</span>}
+              {nextCourse && (
+                <button
+                  type="button"
+                  onClick={() => void onSelectCourse(nextCourse.id)}
+                  className="hover:underline px-1 cursor-pointer"
+                  title={`切换到下一课：${nextCourse.levelBadge}`}
+                >
+                  下一课 →
+                </button>
+              )}
+            </div>
+          </div>
         </div>
 
         <button

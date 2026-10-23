@@ -439,6 +439,73 @@ export async function importBackupJsonText(jsonText: string): Promise<PaliBackup
   return parsed;
 }
 
+const COURSE_ORDER = [
+  'course-1',
+  'course-2',
+  'course-3',
+  'course-4',
+  'course-5',
+  'course-6',
+];
+
+export function getLocalDateKey(date: Date = new Date()): string {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+export async function syncDailyRollover(): Promise<void> {
+  const todayKey = getLocalDateKey();
+  const metaRows = await db.meta.toArray();
+  const metaMap = new Map(metaRows.map((m) => [m.key, m.value]));
+
+  const lastStudyDate =
+    typeof metaMap.get('lastStudyDate') === 'string'
+      ? (metaMap.get('lastStudyDate') as string)
+      : null;
+
+  if (lastStudyDate === todayKey) {
+    return;
+  }
+
+  const currentCourseId =
+    typeof metaMap.get('selectedCourseId') === 'string'
+      ? (metaMap.get('selectedCourseId') as string)
+      : 'course-1';
+  const currentStreak =
+    typeof metaMap.get('streakDays') === 'number'
+      ? (metaMap.get('streakDays') as number)
+      : 0;
+
+  const didAnyTaskYesterday = Boolean(
+    metaMap.get('task_cards_done') ||
+      metaMap.get('task_grammar_done') ||
+      metaMap.get('task_audio_done') ||
+      metaMap.get('task_reading_done')
+  );
+
+  // If transitioning from yesterday (either first upgrade without lastStudyDate, or a new calendar date)
+  const currentIdx = Math.max(0, COURSE_ORDER.indexOf(currentCourseId));
+  const shouldAdvanceCourse = !lastStudyDate || didAnyTaskYesterday;
+  const nextCourseId =
+    shouldAdvanceCourse && currentIdx + 1 < COURSE_ORDER.length
+      ? COURSE_ORDER[currentIdx + 1]
+      : currentCourseId;
+
+  const nextStreak = shouldAdvanceCourse ? currentStreak + 1 : currentStreak;
+
+  await db.meta.bulkPut([
+    { key: 'lastStudyDate', value: todayKey },
+    { key: 'selectedCourseId', value: nextCourseId },
+    { key: 'streakDays', value: nextStreak },
+    { key: 'task_cards_done', value: false },
+    { key: 'task_grammar_done', value: false },
+    { key: 'task_audio_done', value: false },
+    { key: 'task_reading_done', value: false },
+  ]);
+}
+
 export async function ensureSeededDatabase(): Promise<void> {
   const seeded = await db.meta.get('initialized_v1');
   if (seeded) {
@@ -461,6 +528,8 @@ export async function ensureSeededDatabase(): Promise<void> {
     if (missingCards.length > 0) {
       await db.cards.bulkPut(missingCards);
     }
+    // Check if calendar date has rolled over to a new day and advance course / reset daily tasks
+    await syncDailyRollover();
     return;
   }
 
@@ -471,6 +540,7 @@ export async function ensureSeededDatabase(): Promise<void> {
       const mirrorPayload = JSON.parse(mirrorRaw) as PaliBackupPayload;
       if (mirrorPayload?.data?.cards?.length) {
         await applyBackupPayload(mirrorPayload);
+        await syncDailyRollover();
         return;
       }
     }
@@ -483,6 +553,7 @@ export async function ensureSeededDatabase(): Promise<void> {
 
 export async function restoreSampleProgress(): Promise<void> {
   const now = Date.now();
+  const todayKey = getLocalDateKey();
   const allLemmas = Object.keys(DPD_DICTIONARY);
 
   const sortedLemmas = [...allLemmas].sort(
@@ -534,6 +605,7 @@ export async function restoreSampleProgress(): Promise<void> {
 
   await db.meta.bulkPut([
     { key: 'initialized_v1', value: true },
+    { key: 'lastStudyDate', value: todayKey },
     { key: 'streakDays', value: 12 },
     { key: 'baseMasteredOffset', value: 37 },
     { key: 'selectedCourseId', value: 'course-1' },
@@ -542,7 +614,7 @@ export async function restoreSampleProgress(): Promise<void> {
     { key: 'autoSaveEnabled', value: true },
     { key: 'lastSavedAt', value: now },
     { key: 'lastSaveType', value: 'auto' },
-    { key: 'task_cards_done', value: true },
+    { key: 'task_cards_done', value: false },
     { key: 'task_grammar_done', value: false },
     { key: 'task_audio_done', value: false },
     { key: 'task_reading_done', value: false },
@@ -554,6 +626,7 @@ export async function restoreSampleProgress(): Promise<void> {
 // Reset all progress to 0 so the user can study from scratch (从 0 开始学 · 第 1 阶零基础入门课)
 export async function resetToZeroProgress(dailyLimit = 5): Promise<void> {
   const now = Date.now();
+  const todayKey = getLocalDateKey();
   const allLemmas = Object.keys(DPD_DICTIONARY);
 
   const sortedLemmas = [...allLemmas].sort(
@@ -602,6 +675,7 @@ export async function resetToZeroProgress(dailyLimit = 5): Promise<void> {
 
   await db.meta.bulkPut([
     { key: 'initialized_v1', value: true },
+    { key: 'lastStudyDate', value: todayKey },
     { key: 'streakDays', value: 0 },
     { key: 'baseMasteredOffset', value: 0 },
     { key: 'selectedCourseId', value: 'course-1' },
