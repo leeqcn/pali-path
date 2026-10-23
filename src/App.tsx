@@ -31,6 +31,8 @@ import {
   resetToZeroProgress,
   restoreFromSnapshotId,
   restoreSampleProgress,
+  setManualStreakDays,
+  syncStudyStreak,
   type FlashcardRecord,
   type GrammarAttemptRecord,
   type SavedSnapshotItem,
@@ -43,7 +45,8 @@ export function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('today');
   const [cards, setCards] = useState<FlashcardRecord[]>([]);
   const [grammarAttempts, setGrammarAttempts] = useState<GrammarAttemptRecord[]>([]);
-  const [streakDays, setStreakDays] = useState<number>(12);
+  const [streakDays, setStreakDays] = useState<number>(1);
+  const [studyDates, setStudyDates] = useState<string[]>([]);
   const [baseMasteredOffset, setBaseMasteredOffset] = useState<number>(37);
   // Progressive Course ID ('course-1' ... 'course-6') — easy to hard
   const [selectedCourseId, setSelectedCourseId] = useState<string>('course-1');
@@ -96,6 +99,16 @@ export function App() {
     const metaMap = new Map(metaRows.map((m) => [m.key, m.value]));
     if (typeof metaMap.get('streakDays') === 'number') {
       setStreakDays(metaMap.get('streakDays') as number);
+    }
+    if (typeof metaMap.get('studyDatesJson') === 'string') {
+      try {
+        const parsed = JSON.parse(metaMap.get('studyDatesJson') as string);
+        if (Array.isArray(parsed)) {
+          setStudyDates(parsed.filter((d): d is string => typeof d === 'string'));
+        }
+      } catch {
+        // Ignore
+      }
     }
     if (typeof metaMap.get('baseMasteredOffset') === 'number') {
       setBaseMasteredOffset(metaMap.get('baseMasteredOffset') as number);
@@ -163,6 +176,16 @@ export function App() {
       const metaMap = new Map(metaRows.map((m) => [m.key, m.value]));
       if (typeof metaMap.get('streakDays') === 'number') {
         setStreakDays(metaMap.get('streakDays') as number);
+      }
+      if (typeof metaMap.get('studyDatesJson') === 'string') {
+        try {
+          const parsed = JSON.parse(metaMap.get('studyDatesJson') as string);
+          if (Array.isArray(parsed)) {
+            setStudyDates(parsed.filter((d): d is string => typeof d === 'string'));
+          }
+        } catch {
+          // Ignore
+        }
       }
       if (typeof metaMap.get('baseMasteredOffset') === 'number') {
         setBaseMasteredOffset(metaMap.get('baseMasteredOffset') as number);
@@ -301,6 +324,7 @@ export function App() {
             ? taskStatus.audioDone
             : taskStatus.readingDone;
     await db.meta.put({ key, value: !currentVal });
+    await syncStudyStreak(true);
     await loadAllFromIndexedDB(true);
   };
 
@@ -308,6 +332,20 @@ export function App() {
     key: 'task_cards_done' | 'task_grammar_done' | 'task_audio_done' | 'task_reading_done'
   ) => {
     await db.meta.put({ key, value: true });
+    await syncStudyStreak(true);
+    await loadAllFromIndexedDB(true);
+  };
+
+  const handleSetManualStreakDays = async (days: number | null) => {
+    if (days === null) {
+      await db.meta.bulkPut([
+        { key: 'manualStreakDate', value: '' },
+        { key: 'manualStreakDays', value: -1 },
+      ]);
+      await syncStudyStreak(true);
+    } else {
+      await setManualStreakDays(days);
+    }
     await loadAllFromIndexedDB(true);
   };
 
@@ -359,6 +397,8 @@ export function App() {
             cards={cards}
             grammarAttempts={grammarAttempts}
             streakDays={streakDays}
+            studyDates={studyDates}
+            onSetManualStreakDays={handleSetManualStreakDays}
             masteredCount={masteredCount}
             suttaCoveragePct={suttaCoveragePct}
             selectedCourseId={selectedCourseId}

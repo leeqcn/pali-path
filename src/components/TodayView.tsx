@@ -45,6 +45,8 @@ interface TodayViewProps {
   cards: FlashcardRecord[];
   grammarAttempts: GrammarAttemptRecord[];
   streakDays: number;
+  studyDates: string[];
+  onSetManualStreakDays: (days: number | null) => Promise<void>;
   masteredCount: number;
   suttaCoveragePct: number;
   selectedCourseId: string;
@@ -95,6 +97,8 @@ export const TodayView: React.FC<TodayViewProps> = ({
   cards,
   grammarAttempts,
   streakDays,
+  studyDates,
+  onSetManualStreakDays,
   masteredCount,
   suttaCoveragePct,
   selectedCourseId,
@@ -122,6 +126,7 @@ export const TodayView: React.FC<TodayViewProps> = ({
   onStartReadingTask,
 }) => {
   const [showDataAndStats, setShowDataAndStats] = useState(false);
+  const [showStreakDetail, setShowStreakDetail] = useState(false);
   // Collapsible Menu Drawer (平时收起，点击右上角图标展开)
   const [showMenuDrawer, setShowMenuDrawer] = useState(false);
   const [drawerTab, setDrawerTab] = useState<DrawerTab>('plan');
@@ -303,12 +308,20 @@ export const TodayView: React.FC<TodayViewProps> = ({
 
         {/* 3 Metrics */}
         <div className="flex-1 grid grid-cols-3 gap-2 text-left pl-2">
-          <div>
+          <button
+            type="button"
+            onClick={() => setShowStreakDetail((prev) => !prev)}
+            title="点击查看打卡日期记录或校准连续学习天数"
+            className="text-left rounded-xl hover:bg-[#EEF4F1] p-1 -m-1 transition-colors cursor-pointer"
+          >
             <div className="text-2xl sm:text-[26px] font-bold text-[#1E2A27] tabular-nums leading-tight">
               {streakDays} 天
             </div>
-            <div className="mt-1 text-xs text-[#657470]">连续学习</div>
-          </div>
+            <div className="mt-1 text-xs text-[#657470] flex items-center gap-0.5">
+              <span>连续学习</span>
+              <ChevronDown className="w-3 h-3 text-[#8AA09A]" />
+            </div>
+          </button>
 
           <div>
             <div className="text-2xl sm:text-[26px] font-bold text-[#1E2A27] tabular-nums leading-tight">
@@ -325,6 +338,55 @@ export const TodayView: React.FC<TodayViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Expandable Streak Details & Manual Calibration Bar */}
+      {showStreakDetail && (
+        <div className="mt-2.5 rounded-2xl bg-[#FAFBF9] border border-[#DCE6E1] px-4 py-3 text-xs text-[#3D4D49] shadow-xs">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <span className="font-bold text-[#1E2A27]">打卡日期统计：</span>
+              <span>
+                {studyDates.length > 0
+                  ? `累计打卡 ${studyDates.length} 天（${studyDates.slice(-5).map((d) => d.slice(5)).join('、')}）`
+                  : '今日尚未记录打卡'}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowStreakDetail(false)}
+              className="text-[#687773] hover:text-[#1E2A27] cursor-pointer"
+            >
+              收起
+            </button>
+          </div>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[#E8EFEA]">
+            <span className="text-[#657470]">手动校准连续学习天数：</span>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => void onSetManualStreakDays(Math.max(0, streakDays - 1))}
+                className="px-2.5 py-1 rounded-lg bg-[#EDF3F0] hover:bg-[#DCEAE4] text-[#1E2A27] font-semibold cursor-pointer"
+              >
+                -1 天
+              </button>
+              <button
+                type="button"
+                onClick={() => void onSetManualStreakDays(streakDays + 1)}
+                className="px-2.5 py-1 rounded-lg bg-[#EDF3F0] hover:bg-[#DCEAE4] text-[#1E2A27] font-semibold cursor-pointer"
+              >
+                +1 天
+              </button>
+              <button
+                type="button"
+                onClick={() => void onSetManualStreakDays(null)}
+                className="px-2.5 py-1 rounded-lg bg-[#E4F0EC] hover:bg-[#D2E6DF] text-[#25635E] font-semibold cursor-pointer"
+              >
+                按打卡记录重算
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 今日任务 Section (包含：1.词卡复习  2.语法学习  3.听一段音频  4.课程配套经文) */}
       <div className="mt-7">

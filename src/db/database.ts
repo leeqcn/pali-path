@@ -144,6 +144,7 @@ export async function rateFlashcard(lemma: string, rating: CardRating): Promise<
   };
 
   await db.cards.put(updated);
+  await syncStudyStreak(true);
   return updated;
 }
 
@@ -168,6 +169,7 @@ export async function saveSuttaSentenceProgress(
     lastSentenceIdx: sentenceIdx,
     updatedAt: Date.now(),
   });
+  await syncStudyStreak(true);
   return nextReadArr;
 }
 
@@ -455,8 +457,191 @@ export function getLocalDateKey(date: Date = new Date()): string {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-export async function syncDailyRollover(): Promise<void> {
+export function getDateKeyWithOffset(date: Date, offsetDays: number): string {
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate() + offsetDays);
+  return getLocalDateKey(d);
+}
+
+export async function syncStudyStreak(includeToday = true): Promise<{
+  streakDays: number;
+  studyDates: string[];
+}> {
+  const now = new Date();
+  const todayKey = getLocalDateKey(now);
+  const yesterdayKey = getDateKeyWithOffset(now, -1);
+
+  const [cards, grammarAttempts, suttaProgress, metaRows] = await Promise.all([
+    db.cards.toArray(),
+    db.grammarAttempts.toArray(),
+    db.suttaProgress.toArray(),
+    db.meta.toArray(),
+  ]);
+
+  const metaMap = new Map(metaRows.map((m) => [m.key, m.value]));
+  const resetAtTs =
+    typeof metaMap.get('resetAtTimestamp') === 'number'
+      ? (metaMap.get('resetAtTimestamp') as number)
+      : 0;
+
+  const dateSet = new Set<string>();
+
+  // 1. Explicit studyDatesJson saved in meta
+  if (typeof metaMap.get('studyDatesJson') === 'string') {
+    try {
+      const parsed = JSON.parse(metaMap.get('studyDatesJson') as string);
+      if (Array.isArray(parsed)) {
+        parsed.forEach((d) => {
+          if (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) {
+            dateSet.add(d);
+          }
+        });
+      }
+    } catch {
+      // Ignore malformed JSON
+    }
+  }
+
+  // 2. Real card review timestamps
+  cards.forEach((c) => {
+    if (
+      typeof c.lastReviewedAt === 'number' &&
+      c.lastReviewedAt >= resetAtTs &&
+      c.lastReviewedAt > 0
+    ) {
+      dateSet.add(getLocalDateKey(new Date(c.lastReviewedAt)));
+    }
+  });
+
+  // 3. Real grammar attempt timestamps
+  grammarAttempts.forEach((a) => {
+    if (typeof a.timestamp === 'number' && a.timestamp >= resetAtTs && a.timestamp > 0) {
+      dateSet.add(getLocalDateKey(new Date(a.timestamp)));
+    }
+  });
+
+  // 4. Real sutta progress timestamps (excluding untouched initial sample seed)
+  suttaProgress.forEach((s) => {
+    const isUntouchedSample =
+      s.suttaId === 'dhp-1' &&
+      s.readSentenceIds.length <= 1 &&
+      s.listenedSentenceIds.length <= 1 &&
+      resetAtTs === 0;
+    if (
+      !isUntouchedSample &&
+      typeof s.updatedAt === 'number' &&
+      s.updatedAt >= resetAtTs &&
+      s.updatedAt > 0
+    ) {
+      dateSet.add(getLocalDateKey(new Date(s.updatedAt)));
+    }
+  });
+
+  // 5. Saved snapshots in localStorage
+  const snapshots = getSavedSnapshots();
+  snapshots.forEach((snap) => {
+    if (
+      snap.timestamp >= resetAtTs &&
+      snap.label !== '初始 12 天示例学习存档' &&
+      snap.label !== '重置为从 0 开始学习存档'
+    ) {
+      dateSet.add(getLocalDateKey(new Date(snap.timestamp)));
+    }
+  });
+
+  // 6. If the user has already advanced beyond course-1 (e.g. rolled over from yesterday's course),
+  // ensure yesterdayKey is recorded as a study date.
+  const selectedCourseId =
+    typeof metaMap.get('selectedCourseId') === 'string'
+      ? (metaMap.get('selectedCourseId') as string)
+      : 'course-1';
+  if (selectedCourseId !== 'course-1' && resetAtTs === 0) {
+    dateSet.add(yesterdayKey);
+  }
+
+  // 7. Include today if requested or if any daily task is marked done today
+  const didAnyTaskToday = Boolean(
+    metaMap.get('task_cards_done') ||
+      metaMap.get('task_grammar_done') ||
+      metaMap.get('task_audio_done') ||
+      metaMap.get('task_reading_done')
+  );
+  if (includeToday || didAnyTaskToday) {
+    dateSet.add(todayKey);
+  }
+
+  const sortedDates = Array.from(dateSet).sort();
+
+  let computedStreak = 0;
+  if (dateSet.has(todayKey)) {
+    let offset = 0;
+    while (dateSet.has(getDateKeyWithOffset(now, offset))) {
+      computedStreak += 1;
+      offset -= 1;
+    }
+  } else if (dateSet.has(yesterdayKey)) {
+    let offset = -1;
+    while (dateSet.has(getDateKeyWithOffset(now, offset))) {
+      computedStreak += 1;
+      offset -= 1;
+    }
+  }
+
+  // Check if user manually calibrated streak
+  const manualStreakDate =
+    typeof metaMap.get('manualStreakDate') === 'string'
+      ? (metaMap.get('manualStreakDate') as string)
+      : '';
+  const manualStreakDays =
+    typeof metaMap.get('manualStreakDays') === 'number'
+      ? (metaMap.get('manualStreakDays') as number)
+      : -1;
+
+  let finalStreak = computedStreak;
+  if (manualStreakDate && manualStreakDays >= 0) {
+    if (manualStreakDate === todayKey) {
+      finalStreak = manualStreakDays;
+    } else if (dateSet.has(manualStreakDate)) {
+      let extraDays = 0;
+      let offset = 0;
+      while (offset > -365) {
+        const k = getDateKeyWithOffset(now, offset);
+        if (k === manualStreakDate) {
+          finalStreak = manualStreakDays + extraDays;
+          break;
+        }
+        if (dateSet.has(k)) {
+          extraDays += 1;
+          offset -= 1;
+        } else {
+          break;
+        }
+      }
+    }
+  }
+
+  await db.meta.bulkPut([
+    { key: 'streakDays', value: finalStreak },
+    { key: 'studyDatesJson', value: JSON.stringify(sortedDates) },
+  ]);
+
+  return { streakDays: finalStreak, studyDates: sortedDates };
+}
+
+export async function setManualStreakDays(days: number): Promise<number> {
+  const clamped = Math.max(0, Math.round(days));
   const todayKey = getLocalDateKey();
+  await db.meta.bulkPut([
+    { key: 'manualStreakDate', value: todayKey },
+    { key: 'manualStreakDays', value: clamped },
+    { key: 'streakDays', value: clamped },
+  ]);
+  return clamped;
+}
+
+export async function syncDailyRollover(): Promise<void> {
+  const now = new Date();
+  const todayKey = getLocalDateKey(now);
+  const yesterdayKey = getDateKeyWithOffset(now, -1);
   const metaRows = await db.meta.toArray();
   const metaMap = new Map(metaRows.map((m) => [m.key, m.value]));
 
@@ -466,6 +651,7 @@ export async function syncDailyRollover(): Promise<void> {
       : null;
 
   if (lastStudyDate === todayKey) {
+    await syncStudyStreak(true);
     return;
   }
 
@@ -473,10 +659,6 @@ export async function syncDailyRollover(): Promise<void> {
     typeof metaMap.get('selectedCourseId') === 'string'
       ? (metaMap.get('selectedCourseId') as string)
       : 'course-1';
-  const currentStreak =
-    typeof metaMap.get('streakDays') === 'number'
-      ? (metaMap.get('streakDays') as number)
-      : 0;
 
   const didAnyTaskYesterday = Boolean(
     metaMap.get('task_cards_done') ||
@@ -485,7 +667,25 @@ export async function syncDailyRollover(): Promise<void> {
       metaMap.get('task_reading_done')
   );
 
-  // If transitioning from yesterday (either first upgrade without lastStudyDate, or a new calendar date)
+  // If transitioning from a previous day, record that previous study date before resetting daily task flags
+  const existingDates = new Set<string>();
+  if (typeof metaMap.get('studyDatesJson') === 'string') {
+    try {
+      const parsed = JSON.parse(metaMap.get('studyDatesJson') as string);
+      if (Array.isArray(parsed)) {
+        parsed.forEach((d) => {
+          if (typeof d === 'string') existingDates.add(d);
+        });
+      }
+    } catch {
+      // Ignore
+    }
+  }
+  if (!lastStudyDate || didAnyTaskYesterday) {
+    existingDates.add(lastStudyDate || yesterdayKey);
+  }
+  existingDates.add(todayKey);
+
   const currentIdx = Math.max(0, COURSE_ORDER.indexOf(currentCourseId));
   const shouldAdvanceCourse = !lastStudyDate || didAnyTaskYesterday;
   const nextCourseId =
@@ -493,17 +693,17 @@ export async function syncDailyRollover(): Promise<void> {
       ? COURSE_ORDER[currentIdx + 1]
       : currentCourseId;
 
-  const nextStreak = shouldAdvanceCourse ? currentStreak + 1 : currentStreak;
-
   await db.meta.bulkPut([
     { key: 'lastStudyDate', value: todayKey },
     { key: 'selectedCourseId', value: nextCourseId },
-    { key: 'streakDays', value: nextStreak },
+    { key: 'studyDatesJson', value: JSON.stringify(Array.from(existingDates).sort()) },
     { key: 'task_cards_done', value: false },
     { key: 'task_grammar_done', value: false },
     { key: 'task_audio_done', value: false },
     { key: 'task_reading_done', value: false },
   ]);
+
+  await syncStudyStreak(true);
 }
 
 export async function ensureSeededDatabase(): Promise<void> {
@@ -528,7 +728,7 @@ export async function ensureSeededDatabase(): Promise<void> {
     if (missingCards.length > 0) {
       await db.cards.bulkPut(missingCards);
     }
-    // Check if calendar date has rolled over to a new day and advance course / reset daily tasks
+    // Check if calendar date has rolled over to a new day and advance course / sync real streak
     await syncDailyRollover();
     return;
   }
@@ -606,7 +806,11 @@ export async function restoreSampleProgress(): Promise<void> {
   await db.meta.bulkPut([
     { key: 'initialized_v1', value: true },
     { key: 'lastStudyDate', value: todayKey },
-    { key: 'streakDays', value: 12 },
+    { key: 'streakDays', value: 1 },
+    { key: 'studyDatesJson', value: JSON.stringify([todayKey]) },
+    { key: 'resetAtTimestamp', value: 0 },
+    { key: 'manualStreakDate', value: '' },
+    { key: 'manualStreakDays', value: -1 },
     { key: 'baseMasteredOffset', value: 37 },
     { key: 'selectedCourseId', value: 'course-1' },
     { key: 'selectedLessonId', value: 'kp-1' },
@@ -677,6 +881,10 @@ export async function resetToZeroProgress(dailyLimit = 5): Promise<void> {
     { key: 'initialized_v1', value: true },
     { key: 'lastStudyDate', value: todayKey },
     { key: 'streakDays', value: 0 },
+    { key: 'studyDatesJson', value: JSON.stringify([]) },
+    { key: 'resetAtTimestamp', value: now },
+    { key: 'manualStreakDate', value: '' },
+    { key: 'manualStreakDays', value: -1 },
     { key: 'baseMasteredOffset', value: 0 },
     { key: 'selectedCourseId', value: 'course-1' },
     { key: 'selectedLessonId', value: 'kp-1' },
